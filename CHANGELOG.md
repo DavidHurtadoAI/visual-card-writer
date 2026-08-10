@@ -2,6 +2,10 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.5
+
+- Reveal a card's children as soon as it is selected, at every heading level, without moving the selection to them. Opening a note now shows the first H1 selected with its children already visible, instead of a single collapsed card.
+
 ## 0.1.4
 
 - Make the text selection visible again while editing a card. The active-line highlight used an opaque background, which covered CodeMirror's selection layer, so double-clicking a word left it looking unselected while every other occurrence of that word lit up as a match.
