@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,6 +17,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
     steps:
       - name: Check out repository
@@ -32,14 +40,14 @@ jobs:
         run: pnpm run check
 
       - name: Validate release metadata
-        run: node scripts/validate-release.mjs "$GITHUB_REF_NAME"
+        run: node scripts/validate-release.mjs "$RELEASE_TAG"
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          if ! gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
           fi
-          gh release upload "$GITHUB_REF_NAME" main.js manifest.json styles.css --clobber
+          gh release upload "$RELEASE_TAG" main.js manifest.json styles.css --clobber
   
