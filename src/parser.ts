@@ -70,6 +70,16 @@ export function parseCardDocument(source: string): CardDocument {
   return { cards, roots, issues, prologue: source.slice(contentStart, headings[0].start) };
 }
 
+export function needsRootHeading(document: CardDocument): boolean {
+  return document.cards.length === 0 || document.cards[0].level !== 1;
+}
+
+export function withSyntheticRootHeading(source: string, title: string): string {
+  const frontmatter = findFrontmatter(source);
+  const insertAt = frontmatter?.end ?? 0;
+  return `${source.slice(0, insertAt)}# ${title}\n\n${source.slice(insertAt)}`;
+}
+
 export function replaceCardFragment(source: string, card: CardNode, replacement: string): string {
   if (card.range.start < 0 || card.range.end < card.range.start || card.range.end > source.length) {
     throw new Error(`Invalid source range for ${card.id}.`);
