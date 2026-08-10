@@ -42,6 +42,18 @@ describe("getVisibleCards", () => {
 
     expect(visible.map((card) => card.id)).toEqual(["card-0", "card-5"]);
   });
+
+  it("reveals only the direct children when every branch but the selected root is collapsed", () => {
+    const deepDocument = parseCardDocument(
+      "# Root\n\n## First\n\n### Detail A\n\n#### Deep\n\n### Detail B\n\n## Second\n\n### Detail C\n"
+    );
+    const collapsed = new Set(getBranchCardIds(deepDocument.cards));
+    collapsed.delete("card-0");
+
+    const visible = getVisibleCards(deepDocument.cards, collapsed);
+
+    expect(visible.map((card) => card.id)).toEqual(["card-0", "card-1", "card-5"]);
+  });
 });
 
 describe("getOpenBranchDescendants", () => {

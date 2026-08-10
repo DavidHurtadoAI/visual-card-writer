@@ -604,10 +604,17 @@ export class VisualCardWriterView extends TextFileView {
       await this.finishEditing(true);
     }
     this.selectedCardId = cardId;
+    this.expandCard(cardId);
     await this.renderView();
     const element = this.cardElement(cardId);
     element?.focus({ preventScroll: true });
     this.animateViewportToCard(cardId);
+  }
+
+  private expandCard(cardId: string | null): void {
+    if (cardId) {
+      this.collapsedCardIds.delete(cardId);
+    }
   }
 
   private handleCardKeydown(event: KeyboardEvent, card: CardNode, siblings: string[]): void {
@@ -1623,9 +1630,11 @@ export class VisualCardWriterView extends TextFileView {
       new Notice(`Added a "${this.file!.basename}" heading because the note had no top-level heading.`);
       void this.save();
     }
+    let initializingCollapseState = false;
     if (!this.collapseStateInitialized && this.parsed.issues.length === 0 && this.parsed.cards.length > 0) {
       this.collapsedCardIds = new Set(getBranchCardIds(this.parsed.cards));
       this.collapseStateInitialized = true;
+      initializingCollapseState = true;
     }
     const cardIds = new Set(this.parsed.cards.map((card) => card.id));
     for (const cardId of this.cardHeights.keys()) {
@@ -1646,6 +1655,9 @@ export class VisualCardWriterView extends TextFileView {
     }
     if (!this.selectedCardId || !this.cardById(this.selectedCardId)) {
       this.selectedCardId = this.parsed.roots[0] ?? null;
+    }
+    if (initializingCollapseState) {
+      this.expandCard(this.selectedCardId);
     }
     void this.renderView();
   }
