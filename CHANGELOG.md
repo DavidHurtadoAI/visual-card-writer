@@ -2,6 +2,10 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.3
+
+- When a note has no H1 (no headings at all, or the topmost headings start below H1), automatically insert an `# <file name>` heading so the note has a valid card root instead of blocking the card editor.
+
 ## 0.1.2
 
 - Preserve the user's card-view leaf placement when the plugin unloads or reloads.

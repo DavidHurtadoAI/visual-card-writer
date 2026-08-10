@@ -26,7 +26,7 @@ import {
   keymap,
   rectangularSelection
 } from "@codemirror/view";
-import { parseCardDocument, reconcileCard, replaceCardFragment } from "./parser";
+import { needsRootHeading, parseCardDocument, reconcileCard, replaceCardFragment, withSyntheticRootHeading } from "./parser";
 import {
   computeTreeLayout,
   getCardEmphasis,
@@ -1595,8 +1595,19 @@ export class VisualCardWriterView extends TextFileView {
   }
 
   private applyDocumentText(text: string): void {
-    this.data = text;
-    this.parsed = parseCardDocument(text);
+    let source = text;
+    let parsed = parseCardDocument(source);
+    if (this.file && needsRootHeading(parsed)) {
+      source = withSyntheticRootHeading(source, this.file.basename);
+      parsed = parseCardDocument(source);
+    }
+    this.data = source;
+    this.parsed = parsed;
+    if (source !== text) {
+      this.session?.commit(source, this, "local");
+      new Notice(`Added a "${this.file!.basename}" heading because the note had no top-level heading.`);
+      void this.save();
+    }
     if (!this.collapseStateInitialized && this.parsed.issues.length === 0 && this.parsed.cards.length > 0) {
       this.collapsedCardIds = new Set(getBranchCardIds(this.parsed.cards));
       this.collapseStateInitialized = true;

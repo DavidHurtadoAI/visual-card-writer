@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseCardDocument, reconcileCard, replaceCardFragment } from "../src/parser";
+import {
+  needsRootHeading,
+  parseCardDocument,
+  reconcileCard,
+  replaceCardFragment,
+  withSyntheticRootHeading
+} from "../src/parser";
 
 describe("parseCardDocument", () => {
   it("builds a hierarchy from ATX headings", () => {
@@ -111,5 +117,56 @@ describe("card fragment operations", () => {
     const after = parseCardDocument("# Root\n\n## New\n");
 
     expect(reconcileCard(before.cards[1], after)?.title).toBe("New");
+  });
+});
+
+describe("synthetic root heading fallback", () => {
+  it("flags a document with no headings as needing a root heading", () => {
+    const parsed = parseCardDocument("Just a paragraph, no headings at all.\n");
+
+    expect(needsRootHeading(parsed)).toBe(true);
+  });
+
+  it("flags a document that starts below H1 as needing a root heading", () => {
+    const parsed = parseCardDocument("## Orphan\nBody\n\n## Sibling\nBody\n");
+
+    expect(needsRootHeading(parsed)).toBe(true);
+  });
+
+  it("does not flag a document that already starts at H1", () => {
+    const parsed = parseCardDocument("# Root\nBody\n\n## Child\nBody\n");
+
+    expect(needsRootHeading(parsed)).toBe(false);
+  });
+
+  it("wraps headingless content under a synthetic H1 with the given title", () => {
+    const fixed = withSyntheticRootHeading("Just a paragraph.\n", "My Note");
+    const parsed = parseCardDocument(fixed);
+
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.cards).toHaveLength(1);
+    expect(parsed.cards[0]).toMatchObject({ level: 1, title: "My Note" });
+    expect(parsed.cards[0].markdown).toContain("Just a paragraph.");
+  });
+
+  it("nests pre-existing top-level headings as children of the synthetic H1", () => {
+    const fixed = withSyntheticRootHeading("## Alpha\nOne\n\n## Beta\nTwo\n", "My Note");
+    const parsed = parseCardDocument(fixed);
+
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.cards.map(({ level, title, parentId }) => ({ level, title, parentId }))).toEqual([
+      { level: 1, title: "My Note", parentId: null },
+      { level: 2, title: "Alpha", parentId: "card-0" },
+      { level: 2, title: "Beta", parentId: "card-0" }
+    ]);
+  });
+
+  it("inserts the synthetic H1 after YAML frontmatter", () => {
+    const fixed = withSyntheticRootHeading("---\ntags: [x]\n---\n## Alpha\nBody\n", "My Note");
+
+    expect(fixed.startsWith("---\ntags: [x]\n---\n# My Note\n\n## Alpha")).toBe(true);
+    const parsed = parseCardDocument(fixed);
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.cards[0].title).toBe("My Note");
   });
 });

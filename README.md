@@ -42,11 +42,13 @@ Supporting detail.
 
 Changing a heading level changes that card's position in the hierarchy. Content before the first heading remains outside the card tree.
 
+The hierarchy must start at an H1. If a note has no headings at all, or its topmost headings start below H1 (for example several H2s with no H1 above them), Visual Card Writer automatically inserts a `# <file name>` heading at the top of the note so it has a valid root card, then saves the note with that heading in place.
+
 ## Installation
 
 ### Community plugins
 
-Visual Card Writer is not yet listed in Obsidian's Community plugins directory. This repository is being prepared for submission.
+Visual Card Writer is listed in Obsidian's Community plugins directory. Open **Settings → Community plugins → Browse**, search for **Visual Card Writer**, and install it from there.
 
 ### Manual installation
 
