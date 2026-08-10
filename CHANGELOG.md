@@ -2,6 +2,11 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.2
+
+- Preserve the user's card-view leaf placement when the plugin unloads or reloads.
+- Remove a partially supported CSS decoration property flagged by the Obsidian review.
+
 ## 0.1.1
 
 - Prepared the plugin for Obsidian Community directory review.
