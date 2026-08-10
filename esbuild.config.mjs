@@ -15,6 +15,7 @@ const context = await esbuild.context({
   format: "cjs",
   target: "es2018",
   platform: "browser",
+  minify: production,
   sourcemap: production ? false : "inline",
   treeShaking: true,
   outfile: path.join(projectDirectory, "main.js"),

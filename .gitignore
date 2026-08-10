@@ -1,5 +1,6 @@
 node_modules/
 coverage/
+main.js
 *.log
 *.map
 .DS_Store
