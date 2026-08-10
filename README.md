@@ -103,6 +103,10 @@ Visual Card Writer processes notes locally inside Obsidian. It does not include 
 
 Bug reports and focused pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Development note
+
+> Visual Card Writer was unapologetically vibe-coded: built iteratively with AI assistance, then tested and refined inside a real Obsidian vault.
+
 ## License
 
 [MIT](LICENSE) © David Hurtado
