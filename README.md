@@ -80,7 +80,7 @@ Open a Markdown note and run **Visual Card Writer: Open current note in card edi
 
 ## Development
 
-Requirements: Node.js 20 or later and pnpm 11.
+Requirements: Node.js 22.13 or later and pnpm 11.
 
 ```bash
 pnpm install
@@ -93,7 +93,7 @@ Run the complete verification suite with:
 pnpm run check
 ```
 
-The production build writes `main.js` at the repository root. Automated releases attach `main.js`, `manifest.json`, and `styles.css` to a tag whose name exactly matches the manifest version, without a `v` prefix.
+The production build writes an ignored `main.js` at the repository root. Automated releases attach `main.js`, `manifest.json`, and `styles.css` to a tag whose name exactly matches the manifest version, without a `v` prefix. Compiled plugin files belong in GitHub releases, not in the repository history.
 
 ## Privacy
 

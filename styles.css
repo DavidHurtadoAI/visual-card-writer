@@ -83,6 +83,8 @@
 
 .visual-card-writer-scene {
   position: relative;
+  width: var(--vcw-scene-width, auto);
+  height: var(--vcw-scene-height, auto);
   min-width: 1px;
   min-height: 1px;
 }
@@ -93,27 +95,34 @@
   left: 0;
   display: flex;
   align-items: flex-start;
+  width: var(--vcw-surface-width, auto);
+  height: var(--vcw-surface-height, auto);
   gap: var(--visual-card-writer-column-gap);
+  transform: scale(var(--vcw-zoom, 1));
   transform-origin: top left;
-}
-
-.visual-card-writer-columns.is-panning,
-.visual-card-writer-columns.is-panning * {
-  cursor: grabbing !important;
-  user-select: none !important;
 }
 
 .visual-card-writer-view.is-layout-transitioning .visual-card-writer-columns {
   pointer-events: none;
 }
 
-.visual-card-writer-view.is-layout-transitioning .visual-card-writer-card,
-.visual-card-writer-transition-ghost {
-  transition: none !important;
-}
-
-.visual-card-writer-transition-ghost {
+.visual-card-writer-card.visual-card-writer-transition-ghost {
+  position: fixed;
+  z-index: var(--layer-popover, 1000);
+  top: var(--vcw-ghost-top);
+  left: var(--vcw-ghost-left);
+  width: var(--vcw-ghost-width);
+  min-width: 0;
+  max-width: none;
+  height: var(--vcw-ghost-height);
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
   contain: paint;
+  opacity: var(--vcw-ghost-opacity, 1);
+  pointer-events: none;
+  resize: none;
+  transform-origin: top left;
   will-change: transform, opacity;
 }
 
@@ -121,20 +130,24 @@
   position: relative;
   display: block;
   flex: 0 0 auto;
-  width: max-content;
+  width: var(--vcw-column-width, var(--vcw-layout-column-width, max-content));
+  height: var(--vcw-column-height, auto);
 }
 
 .visual-card-writer-card {
   position: absolute;
-  top: 0;
+  top: var(--vcw-card-top, 0);
   left: 0;
-  width: max(
-    min(320px, calc(100vw - 52px)),
-    calc(33.333333cqw - 12px)
+  width: var(
+    --vcw-column-width,
+    max(
+      min(320px, calc(100vw - 52px)),
+      calc(33.333333cqw - 12px)
+    )
   );
   min-width: min(320px, calc(100vw - 52px));
   max-width: min(1100px, calc(100vw - 52px));
-  height: auto;
+  height: var(--vcw-card-height, auto);
   min-height: 72px;
   padding: 0;
   overflow: hidden;
@@ -145,6 +158,15 @@
   background: var(--background-primary);
   resize: none;
   transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.visual-card-writer-view.is-layout-transitioning .visual-card-writer-card,
+.visual-card-writer-transition-ghost {
+  transition: none;
+}
+
+.visual-card-writer-card.is-transition-destination-hidden {
+  visibility: hidden;
 }
 
 .visual-card-writer-columns:not(.is-laid-out) .visual-card-writer-card {
@@ -219,6 +241,12 @@
   width: 14px;
   height: 14px;
   cursor: nwse-resize;
+}
+
+.visual-card-writer-columns.is-panning,
+.visual-card-writer-columns.is-panning * {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .visual-card-writer-collapse-toggle {

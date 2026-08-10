@@ -103,7 +103,7 @@ export default class VisualCardWriterPlugin extends Plugin {
 
     this.registerCliHandler(
       "visual-card-writer:open-second",
-      "DEVELOPER: open a second card view for the same Markdown file",
+      "Diagnostics: open a second card view for the same Markdown file",
       { path: { value: "<path>", description: "Vault-relative Markdown path", required: true } },
       async (params) => {
         const file = this.requireMarkdownFile(params.path);
@@ -114,7 +114,7 @@ export default class VisualCardWriterPlugin extends Plugin {
 
     this.registerCliHandler(
       "visual-card-writer:start-editing",
-      "DEVELOPER: mount CodeMirror in the active card",
+      "Diagnostics: mount CodeMirror in the active card",
       null,
       async () => {
         const view = this.requireActiveView();
@@ -125,17 +125,17 @@ export default class VisualCardWriterPlugin extends Plugin {
 
     this.registerCliHandler(
       "visual-card-writer:replace-active-card",
-      "DEVELOPER: replace the active card Markdown and save it",
+      "Diagnostics: replace the active card Markdown and save it",
       { content: { value: "<markdown>", description: "Complete card Markdown", required: true } },
-      async (params) => JSON.stringify(await this.requireActiveView().replaceActiveCardForSpike(params.content))
+      async (params) => JSON.stringify(await this.requireActiveView().replaceActiveCardForDiagnostics(params.content))
     );
 
     this.registerCliHandler(
       "visual-card-writer:cycle-editor",
-      "DEVELOPER: mount and destroy the active CodeMirror editor repeatedly",
+      "Diagnostics: mount and destroy the active CodeMirror editor repeatedly",
       { count: { value: "<number>", description: "Cycles, from 1 to 200", required: true } },
       async (params) =>
-        JSON.stringify(await this.requireActiveView().cycleEditorForSpike(Number.parseInt(params.count, 10)))
+        JSON.stringify(await this.requireActiveView().cycleEditorForDiagnostics(Number.parseInt(params.count, 10)))
     );
   }
 

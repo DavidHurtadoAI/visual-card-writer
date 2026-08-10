@@ -340,7 +340,7 @@ export class VisualCardWriterView extends TextFileView {
     }
   }
 
-  async replaceActiveCardForSpike(content: string): Promise<ViewDiagnostics> {
+  async replaceActiveCardForDiagnostics(content: string): Promise<ViewDiagnostics> {
     await this.startEditing();
     if (!this.editor) {
       throw new Error("No active card editor is available.");
@@ -352,7 +352,7 @@ export class VisualCardWriterView extends TextFileView {
     return this.getDiagnostics();
   }
 
-  async cycleEditorForSpike(count: number): Promise<ViewDiagnostics> {
+  async cycleEditorForDiagnostics(count: number): Promise<ViewDiagnostics> {
     if (!Number.isInteger(count) || count < 1 || count > 200) {
       throw new Error("count must be an integer between 1 and 200.");
     }
@@ -480,6 +480,10 @@ export class VisualCardWriterView extends TextFileView {
         cls: "visual-card-writer-column",
         attr: { "data-depth": String(depth), "aria-label": `Level ${depth + 1}` }
       });
+      const rememberedColumnWidth = this.columnWidths.get(depth);
+      if (rememberedColumnWidth) {
+        column.style.setProperty("--vcw-column-width", `${rememberedColumnWidth}px`);
+      }
       for (let index = 0; index < ids.length; index += 1) {
         const card = this.cardById(ids[index]);
         if (!card) {
@@ -507,13 +511,9 @@ export class VisualCardWriterView extends TextFileView {
             "data-emphasis": emphasis
           }
         });
-        const rememberedColumnWidth = this.columnWidths.get(depth);
-        if (rememberedColumnWidth) {
-          cardElement.style.width = `${rememberedColumnWidth}px`;
-        }
         const rememberedHeight = this.cardHeights.get(card.id);
         if (rememberedHeight) {
-          cardElement.style.height = `${rememberedHeight}px`;
+          cardElement.style.setProperty("--vcw-card-height", `${rememberedHeight}px`);
         }
         cardElement.setAttribute(
           "title",
@@ -787,6 +787,9 @@ export class VisualCardWriterView extends TextFileView {
         tabindex: "0",
         "aria-orientation": "vertical",
         "aria-label": "Resize column width",
+        "aria-valuemin": "160",
+        "aria-valuemax": "1100",
+        "aria-valuenow": String(Math.round(card.offsetWidth)),
         title: "Drag to resize every card in this column · Double-click to reset"
       }
     });
@@ -797,6 +800,9 @@ export class VisualCardWriterView extends TextFileView {
         tabindex: "0",
         "aria-orientation": "horizontal",
         "aria-label": "Resize this card height",
+        "aria-valuemin": "72",
+        "aria-valuemax": "4000",
+        "aria-valuenow": String(Math.round(card.offsetHeight)),
         title: "Drag to resize only this card · Double-click to reset"
       }
     });
@@ -984,9 +990,8 @@ export class VisualCardWriterView extends TextFileView {
     if (!column) {
       return;
     }
-    column.style.width = `${width}px`;
+    column.style.setProperty("--vcw-column-width", `${width}px`);
     for (const card of column.querySelectorAll<HTMLElement>(".visual-card-writer-card")) {
-      card.style.width = `${width}px`;
       card.querySelector<HTMLElement>(".visual-card-writer-resize-handle.is-horizontal")?.setAttribute(
         "aria-valuenow",
         String(width)
@@ -1001,11 +1006,11 @@ export class VisualCardWriterView extends TextFileView {
     if (!column) {
       return;
     }
-    column.style.width = "";
+    column.style.removeProperty("--vcw-column-width");
     for (const card of column.querySelectorAll<HTMLElement>(".visual-card-writer-card")) {
-      card.style.width = "";
-      card.querySelector<HTMLElement>(".visual-card-writer-resize-handle.is-horizontal")?.removeAttribute(
-        "aria-valuenow"
+      card.querySelector<HTMLElement>(".visual-card-writer-resize-handle.is-horizontal")?.setAttribute(
+        "aria-valuenow",
+        String(Math.round(card.offsetWidth))
       );
     }
     this.scheduleCardLayout();
@@ -1018,7 +1023,7 @@ export class VisualCardWriterView extends TextFileView {
     if (!card) {
       return;
     }
-    card.style.height = `${height}px`;
+    card.style.setProperty("--vcw-card-height", `${height}px`);
     card.querySelector<HTMLElement>(".visual-card-writer-resize-handle.is-vertical")?.setAttribute(
       "aria-valuenow",
       String(height)
@@ -1032,9 +1037,10 @@ export class VisualCardWriterView extends TextFileView {
     if (!card) {
       return;
     }
-    card.style.height = "";
-    card.querySelector<HTMLElement>(".visual-card-writer-resize-handle.is-vertical")?.removeAttribute(
-      "aria-valuenow"
+    card.style.removeProperty("--vcw-card-height");
+    card.querySelector<HTMLElement>(".visual-card-writer-resize-handle.is-vertical")?.setAttribute(
+      "aria-valuenow",
+      String(Math.round(card.offsetHeight))
     );
     this.scheduleCardLayout();
   }
@@ -1239,9 +1245,9 @@ export class VisualCardWriterView extends TextFileView {
     }
     const worldWidth = Number.parseFloat(scene.dataset.worldWidth ?? "0");
     const worldHeight = Number.parseFloat(scene.dataset.worldHeight ?? "0");
-    surface.style.transform = `scale(${this.zoomLevel})`;
-    scene.style.width = `${Math.ceil(worldWidth * this.zoomLevel)}px`;
-    scene.style.height = `${Math.ceil(worldHeight * this.zoomLevel)}px`;
+    surface.style.setProperty("--vcw-zoom", String(this.zoomLevel));
+    scene.style.setProperty("--vcw-scene-width", `${Math.ceil(worldWidth * this.zoomLevel)}px`);
+    scene.style.setProperty("--vcw-scene-height", `${Math.ceil(worldHeight * this.zoomLevel)}px`);
     const zoomButton = this.contentEl.querySelector<HTMLElement>(".visual-card-writer-zoom-indicator");
     zoomButton?.setText(`${Math.round(this.zoomLevel * 100)}%`);
   }
@@ -1269,23 +1275,11 @@ export class VisualCardWriterView extends TextFileView {
       for (const interactive of ghost.querySelectorAll<HTMLElement>("button, a, input, textarea, [tabindex]")) {
         interactive.setAttribute("tabindex", "-1");
       }
-      Object.assign(ghost.style, {
-        position: "fixed",
-        top: `${rect.top}px`,
-        left: `${rect.left}px`,
-        width: `${rect.width}px`,
-        height: `${rect.height}px`,
-        minWidth: "0",
-        maxWidth: "none",
-        minHeight: "0",
-        margin: "0",
-        opacity: String(opacity),
-        overflow: "hidden",
-        pointerEvents: "none",
-        resize: "none",
-        transformOrigin: "top left",
-        zIndex: "1000"
-      });
+      ghost.style.setProperty("--vcw-ghost-top", `${rect.top}px`);
+      ghost.style.setProperty("--vcw-ghost-left", `${rect.left}px`);
+      ghost.style.setProperty("--vcw-ghost-width", `${rect.width}px`);
+      ghost.style.setProperty("--vcw-ghost-height", `${rect.height}px`);
+      ghost.style.setProperty("--vcw-ghost-opacity", String(opacity));
       document.body.appendChild(ghost);
       this.cardTransitionGhosts.push(ghost);
       items.push({ id, rect, opacity, ghost });
@@ -1345,7 +1339,7 @@ export class VisualCardWriterView extends TextFileView {
       const destination = this.cardElement(item.id);
       const destinationRect = destinationRects.get(item.id);
       if (destination && destinationRect) {
-        destination.style.visibility = "hidden";
+        destination.addClass("is-transition-destination-hidden");
         this.cardTransitionHiddenElements.push(destination);
         const translateX = destinationRect.left - item.rect.left;
         const translateY = destinationRect.top - item.rect.top;
@@ -1418,7 +1412,7 @@ export class VisualCardWriterView extends TextFileView {
       return;
     }
     for (const element of this.cardTransitionHiddenElements) {
-      element.style.visibility = "";
+      element.removeClass("is-transition-destination-hidden");
     }
     for (const ghost of this.cardTransitionGhosts) {
       ghost.remove();
@@ -1443,7 +1437,7 @@ export class VisualCardWriterView extends TextFileView {
       animation.cancel();
     }
     for (const element of this.cardTransitionHiddenElements) {
-      element.style.visibility = "";
+      element.removeClass("is-transition-destination-hidden");
     }
     for (const ghost of this.cardTransitionGhosts) {
       ghost.remove();
@@ -1483,15 +1477,15 @@ export class VisualCardWriterView extends TextFileView {
       const element = this.cardElement(card.id);
       const top = layout.tops.get(card.id);
       if (element && top != null) {
-        element.style.top = `${Math.round(top)}px`;
+        element.style.setProperty("--vcw-card-top", `${Math.round(top)}px`);
       }
     }
     const columnElements = [...columnsElement.querySelectorAll<HTMLElement>(".visual-card-writer-column")];
     for (const column of columnElements) {
       const cards = [...column.querySelectorAll<HTMLElement>(".visual-card-writer-card")];
       const width = cards.reduce((maximum, card) => Math.max(maximum, card.offsetWidth), 0);
-      column.style.width = `${Math.ceil(width)}px`;
-      column.style.height = `${Math.ceil(layout.totalHeight)}px`;
+      column.style.setProperty("--vcw-layout-column-width", `${Math.ceil(width)}px`);
+      column.style.setProperty("--vcw-column-height", `${Math.ceil(layout.totalHeight)}px`);
     }
     const surface = columnsElement.querySelector<HTMLElement>(".visual-card-writer-surface");
     const scene = columnsElement.querySelector<HTMLElement>(".visual-card-writer-scene");
@@ -1505,8 +1499,8 @@ export class VisualCardWriterView extends TextFileView {
         Math.min(480, (columnsElement.clientWidth / this.zoomLevel) * 0.4)
       );
       const sceneWidth = surfaceWidth + trailingWorkspaceWidth;
-      surface.style.width = `${Math.ceil(surfaceWidth)}px`;
-      surface.style.height = `${Math.ceil(layout.totalHeight)}px`;
+      surface.style.setProperty("--vcw-surface-width", `${Math.ceil(surfaceWidth)}px`);
+      surface.style.setProperty("--vcw-surface-height", `${Math.ceil(layout.totalHeight)}px`);
       scene.dataset.worldWidth = String(sceneWidth);
       scene.dataset.worldHeight = String(layout.totalHeight);
       this.applyZoomGeometry(columnsElement);
