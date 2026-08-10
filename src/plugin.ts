@@ -140,7 +140,6 @@ export default class VisualCardWriterPlugin extends Plugin {
   }
 
   onunload(): void {
-    this.app.workspace.detachLeavesOfType(CARD_VIEW_TYPE);
     this.sessions.clear();
   }
 
