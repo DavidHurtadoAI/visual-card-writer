@@ -573,8 +573,18 @@ export class VisualCardWriterView extends TextFileView {
         this.createCardResizeHandles(cardElement, card.id, depth);
         this.layoutResizeObserver.observe(cardElement);
         const body = cardElement.createDiv({ cls: ["visual-card-writer-card-body", "markdown-rendered"] });
-        cardElement.addEventListener("click", () => void this.selectCard(card.id));
-        cardElement.addEventListener("dblclick", () => void this.startEditing(card.id));
+        cardElement.addEventListener("click", (event) => {
+          if (this.isInsideActiveEditor(event)) {
+            return;
+          }
+          void this.selectCard(card.id);
+        });
+        cardElement.addEventListener("dblclick", (event) => {
+          if (this.isInsideActiveEditor(event)) {
+            return;
+          }
+          void this.startEditing(card.id);
+        });
         cardElement.addEventListener("keydown", (event) => this.handleCardKeydown(event, card, ids));
         await MarkdownRenderer.render(this.app, card.markdown, body, this.file?.path ?? "", component);
         if (generation !== this.renderGeneration) {
@@ -766,6 +776,11 @@ export class VisualCardWriterView extends TextFileView {
     this.editingCardId = null;
     this.editingBaseMarkdown = "";
     this.editorDestroys += 1;
+  }
+
+  private isInsideActiveEditor(event: Event): boolean {
+    const target = event.target;
+    return this.editor != null && target instanceof Node && this.editor.dom.contains(target);
   }
 
   private handleViewClick(event: MouseEvent): void {
