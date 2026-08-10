@@ -6,7 +6,8 @@ The document remains standard Markdown. ATX headings define the hierarchy, and e
 
 > Visual Card Writer is currently an early beta. Back up important notes and test the workflow before adopting it for critical writing.
 
-![ovcw|480](Obsidian-visual-card-writer.gif)
+<img src="./Obsidian-visual-card-writer.gif" width="460" alt="Obsidian Visual Writer">
+
 
 ## Features
 
