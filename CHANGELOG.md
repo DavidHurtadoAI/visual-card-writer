@@ -2,6 +2,11 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.4
+
+- Make the text selection visible again while editing a card. The active-line highlight used an opaque background, which covered CodeMirror's selection layer, so double-clicking a word left it looking unselected while every other occurrence of that word lit up as a match.
+- Stop clicks inside an open card editor from being treated as card clicks. They moved keyboard focus from the editor to the card and replayed the viewport animation on every click.
+
 ## 0.1.3
 
 - When a note has no H1 (no headings at all, or the topmost headings start below H1), automatically insert an `# <file name>` heading so the note has a valid card root instead of blocking the card editor.

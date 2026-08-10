@@ -1,6 +1,6 @@
 {
   "name": "obsidian-visual-card-writer",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "Card-based Markdown editor for Obsidian.",
   "author": "David Hurtado",

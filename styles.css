@@ -498,7 +498,12 @@
 }
 
 .visual-card-writer-editor-host .cm-activeLine {
-  background: var(--background-primary-alt);
+  background: color-mix(in srgb, var(--background-primary-alt) 40%, transparent);
+}
+
+.visual-card-writer-editor-host .cm-selectionLayer .cm-selectionBackground,
+.visual-card-writer-editor-host .cm-content ::selection {
+  background: var(--text-selection);
 }
 
 .visual-card-writer-editor-host .cm-focused {
