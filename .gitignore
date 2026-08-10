@@ -1,0 +1,12 @@
+node_modules/
+coverage/
+*.log
+*.map
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local development evidence and historical captures
+*.png
+SPIKE_REPORT.md

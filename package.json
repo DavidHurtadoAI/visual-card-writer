@@ -1,0 +1,54 @@
+{
+  "name": "obsidian-visual-card-writer",
+  "version": "0.1.0",
+  "description": "Card-based Markdown editor for Obsidian.",
+  "author": "David Hurtado",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DavidHurtadoAI/visual-card-writer.git"
+  },
+  "homepage": "https://github.com/DavidHurtadoAI/visual-card-writer#readme",
+  "bugs": {
+    "url": "https://github.com/DavidHurtadoAI/visual-card-writer/issues"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "markdown",
+    "card-editor",
+    "visual-writing"
+  ],
+  "packageManager": "pnpm@11.0.7",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "test": "vitest run",
+    "check": "vitest run && tsc --noEmit && node esbuild.config.mjs production",
+    "release:check": "node scripts/validate-release.mjs"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.8.1",
+    "@codemirror/lang-markdown": "^6.3.3",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/search": "^6.5.11",
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/view": "^6.38.6",
+    "mdast-util-from-markdown": "^2.0.3"
+  },
+  "devDependencies": {
+    "@rollup/rollup-win32-arm64-msvc": "4.62.4",
+    "@types/node": "^24.3.0",
+    "esbuild": "^0.25.12",
+    "obsidian": "^1.13.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
