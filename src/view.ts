@@ -112,13 +112,9 @@ export class VisualCardWriterView extends TextFileView {
   private cardTransitionGhosts: HTMLElement[] = [];
   private cardTransitionHiddenElements: HTMLElement[] = [];
   private cardTransitionCleanupTimer: number | null = null;
+  private layoutOrientation: LayoutOrientation = "horizontal";
 
-  constructor(
-    leaf: WorkspaceLeaf,
-    private readonly sessions: DocumentSessionRegistry,
-    private layoutOrientation: LayoutOrientation = "horizontal",
-    private readonly onLayoutOrientationChange: (orientation: LayoutOrientation) => Promise<void> | void = () => undefined
-  ) {
+  constructor(leaf: WorkspaceLeaf, private readonly sessions: DocumentSessionRegistry) {
     super(leaf);
   }
 
@@ -149,6 +145,8 @@ export class VisualCardWriterView extends TextFileView {
       return;
     }
     if (this.sessionPath !== filePath) {
+      this.layoutOrientation = "horizontal";
+      this.applyLayoutOrientationClass();
       const existing = this.sessions.get(filePath);
       this.bindSession(filePath, data);
       this.applyDocumentText(existing?.text ?? data);
@@ -178,6 +176,8 @@ export class VisualCardWriterView extends TextFileView {
     this.cardHeights.clear();
     this.collapseStateInitialized = false;
     this.zoomLevel = 1;
+    this.layoutOrientation = "horizontal";
+    this.applyLayoutOrientationClass();
   }
 
   async onOpen(): Promise<void> {
@@ -205,12 +205,6 @@ export class VisualCardWriterView extends TextFileView {
     this.cancelViewportScrollAnimation();
     this.layoutOrientation = orientation;
     this.applyLayoutOrientationClass();
-    try {
-      await this.onLayoutOrientationChange(orientation);
-    } catch (error) {
-      console.error("Visual Card Writer could not save the layout orientation.", error);
-      new Notice("The layout changed, but its preference could not be saved.");
-    }
     await this.renderView();
     if (this.selectedCardId) {
       this.animateViewportToCard(this.selectedCardId);
@@ -471,12 +465,7 @@ export class VisualCardWriterView extends TextFileView {
     const toolbar = this.contentEl.createDiv({ cls: "visual-card-writer-toolbar" });
     const title = toolbar.createDiv({ cls: "visual-card-writer-title" });
     title.setText(this.file?.basename ?? "Visual Card Writer");
-    const orientationGroup = toolbar.createDiv({
-      cls: "visual-card-writer-orientation-group",
-      attr: { role: "group", "aria-label": "Card layout orientation" }
-    });
-    this.createOrientationButton(orientationGroup, "horizontal", "columns-3", "Horizontal");
-    this.createOrientationButton(orientationGroup, "vertical", "rows-3", "Vertical");
+    this.createOrientationToggle(toolbar);
     const zoomButton = toolbar.createEl("button", {
       cls: "visual-card-writer-zoom-indicator",
       text: `${Math.round(this.zoomLevel * 100)}%`,
@@ -1777,27 +1766,23 @@ export class VisualCardWriterView extends TextFileView {
     }
   }
 
-  private createOrientationButton(
-    parent: HTMLElement,
-    orientation: LayoutOrientation,
-    icon: string,
-    label: string
-  ): void {
-    const active = orientation === this.layoutOrientation;
+  private createOrientationToggle(parent: HTMLElement): void {
+    const horizontal = this.layoutOrientation === "horizontal";
+    const label = horizontal ? "Horizontal" : "Vertical";
+    const nextLabel = horizontal ? "Vertical" : "Horizontal";
     const button = parent.createEl("button", {
-      cls: ["visual-card-writer-orientation-button", active ? "is-active" : ""],
+      cls: "visual-card-writer-orientation-toggle",
       attr: {
-        "aria-label": `${label} card layout`,
-        "aria-pressed": String(active),
-        title: `${label} card layout`
+        "aria-label": `${label} card layout. Switch to ${nextLabel}`,
+        title: `Current layout: ${label} · Switch to ${nextLabel}`
       }
     });
-    setIcon(button.createSpan({ cls: "visual-card-writer-orientation-icon" }), icon);
+    setIcon(button.createSpan({ cls: "visual-card-writer-orientation-icon" }), horizontal ? "columns-3" : "rows-3");
     button.createSpan({ cls: "visual-card-writer-orientation-label", text: label });
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      void this.setLayoutOrientation(orientation);
+      void this.toggleLayoutOrientation();
     });
   }
 

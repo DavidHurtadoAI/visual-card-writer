@@ -1,42 +1,12 @@
 import { Notice, Plugin, TFile, normalizePath } from "obsidian";
 import { DocumentSessionRegistry } from "./session";
-import type { LayoutOrientation } from "./types";
 import { CARD_VIEW_TYPE, VisualCardWriterView } from "./view";
-
-interface VisualCardWriterSettings {
-  layoutOrientation: LayoutOrientation;
-}
-
-const DEFAULT_SETTINGS: VisualCardWriterSettings = {
-  layoutOrientation: "horizontal"
-};
 
 export default class VisualCardWriterPlugin extends Plugin {
   private readonly sessions = new DocumentSessionRegistry();
-  private pluginSettings: VisualCardWriterSettings = DEFAULT_SETTINGS;
 
   async onload(): Promise<void> {
-    this.pluginSettings = {
-      ...DEFAULT_SETTINGS,
-      ...((await this.loadData()) as Partial<VisualCardWriterSettings> | null)
-    };
-    if (
-      this.pluginSettings.layoutOrientation !== "horizontal" &&
-      this.pluginSettings.layoutOrientation !== "vertical"
-    ) {
-      this.pluginSettings.layoutOrientation = DEFAULT_SETTINGS.layoutOrientation;
-    }
-
-    this.registerView(
-      CARD_VIEW_TYPE,
-      (leaf) =>
-        new VisualCardWriterView(
-          leaf,
-          this.sessions,
-          this.pluginSettings.layoutOrientation,
-          (orientation) => this.saveLayoutOrientation(orientation)
-        )
-    );
+    this.registerView(CARD_VIEW_TYPE, (leaf) => new VisualCardWriterView(leaf, this.sessions));
 
     this.addCommand({
       id: "open-card-editor",
@@ -226,10 +196,5 @@ export default class VisualCardWriterPlugin extends Plugin {
       throw new Error(`Markdown file not found: ${path}`);
     }
     return file;
-  }
-
-  private async saveLayoutOrientation(layoutOrientation: LayoutOrientation): Promise<void> {
-    this.pluginSettings = { ...this.pluginSettings, layoutOrientation };
-    await this.saveData(this.pluginSettings);
   }
 }
