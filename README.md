@@ -44,6 +44,8 @@ Changing a heading level changes that card's position in the hierarchy. Content 
 
 The hierarchy must start at an H1. If a note has no headings at all, or its topmost headings start below H1 (for example several H2s with no H1 above them), Visual Card Writer automatically inserts a `# <file name>` heading at the top of the note so it has a valid root card, then saves the note with that heading in place.
 
+Skipped heading levels do not block the card editor. If an H3 follows an H1, for example, Visual Card Writer shows the H3 as a direct logical child and marks that card with an amber heading hint. The hint can move only that branch up to the expected level, insert the missing parent card, or leave the Markdown unchanged.
+
 ## Installation
 
 ### Community plugins
@@ -82,7 +84,7 @@ Open a Markdown note and run **Visual Card Writer: Open current note in card edi
 
 - Desktop only.
 - Live Preview covers the essential inline Markdown constructs; images, embeds, callouts, and complex block widgets remain source Markdown while editing.
-- A note should use a coherent heading hierarchy for predictable card placement.
+- Skipped heading levels are inferred from the nearest preceding shallower heading and remain visible as local, repairable hints.
 - The plugin is under active development and its interaction details may still change.
 
 ## Development

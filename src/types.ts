@@ -8,6 +8,7 @@ export interface CardRange {
 export interface CardNode {
   id: string;
   level: number;
+  depth: number;
   title: string;
   markdown: string;
   parentId: string | null;
@@ -15,10 +16,26 @@ export interface CardNode {
   range: CardRange;
 }
 
-export interface ParseIssue {
-  line: number;
-  message: string;
-}
+export type ParseIssue =
+  | {
+      kind: "no-headings";
+      line: number;
+      message: string;
+    }
+  | {
+      kind: "missing-root";
+      line: number;
+      message: string;
+      currentLevel: number;
+    }
+  | {
+      kind: "level-jump";
+      line: number;
+      message: string;
+      previousLevel: number;
+      currentLevel: number;
+      expectedLevel: number;
+    };
 
 export interface CardDocument {
   cards: CardNode[];

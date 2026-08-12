@@ -70,7 +70,24 @@ describe("parseCardDocument", () => {
     const parsed = parseCardDocument("# Root\n\n### Jump\n");
 
     expect(parsed.issues).toHaveLength(1);
+    expect(parsed.issues[0]).toMatchObject({
+      kind: "level-jump",
+      line: 3,
+      previousLevel: 1,
+      currentLevel: 3,
+      expectedLevel: 2
+    });
     expect(parsed.issues[0].message).toContain("H1 to H3");
+  });
+
+  it("builds a logical tree depth even when Markdown heading levels jump", () => {
+    const parsed = parseCardDocument("# Root\n\n### Jump\n\n#### Detail\n");
+
+    expect(parsed.cards.map(({ level, depth, parentId }) => ({ level, depth, parentId }))).toEqual([
+      { level: 1, depth: 0, parentId: null },
+      { level: 3, depth: 1, parentId: "card-0" },
+      { level: 4, depth: 2, parentId: "card-1" }
+    ]);
   });
 
   it("does not treat Setext headings as cards", () => {

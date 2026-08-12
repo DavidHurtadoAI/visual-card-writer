@@ -5,7 +5,7 @@ import {
   getCardEmphasis,
   getOpenBranchDescendants,
   getVisibleCards,
-  groupCardsByLevel
+  groupCardsByDepth
 } from "../src/layout";
 import { parseCardDocument } from "../src/parser";
 
@@ -13,13 +13,19 @@ const document = parseCardDocument(
   "# Root\n\n## Active branch\n\n### Child\n\n## Sibling\n\n### Sibling child\n\n# Other root\n"
 );
 
-describe("groupCardsByLevel", () => {
+describe("groupCardsByDepth", () => {
   it("keeps every card visible in its structural column", () => {
-    expect(groupCardsByLevel(document.cards)).toEqual([
+    expect(groupCardsByDepth(document.cards)).toEqual([
       ["card-0", "card-5"],
       ["card-1", "card-3"],
       ["card-2", "card-4"]
     ]);
+  });
+
+  it("places a skipped H3 in the logical child column without an empty H2 column", () => {
+    const skipped = parseCardDocument("# Root\n\n### Child\n\n##### Grandchild\n");
+
+    expect(groupCardsByDepth(skipped.cards)).toEqual([["card-0"], ["card-1"], ["card-2"]]);
   });
 });
 

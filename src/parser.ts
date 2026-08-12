@@ -31,7 +31,7 @@ export function parseCardDocument(source: string): CardDocument {
     return {
       cards: [],
       roots: [],
-      issues: [{ line: 1, message: "The note does not contain a structural ATX heading." }],
+      issues: [{ kind: "no-headings", line: 1, message: "The note does not contain a structural ATX heading." }],
       prologue: source.slice(frontmatter?.end ?? 0)
     };
   }
@@ -51,6 +51,7 @@ export function parseCardDocument(source: string): CardDocument {
     const card: CardNode = {
       id,
       level: heading.level,
+      depth: parent ? parent.depth + 1 : 0,
       title: heading.title,
       markdown: source.slice(heading.start, end),
       parentId: parent?.id ?? null,
@@ -72,6 +73,10 @@ export function parseCardDocument(source: string): CardDocument {
 
 export function needsRootHeading(document: CardDocument): boolean {
   return document.cards.length === 0 || document.cards[0].level !== 1;
+}
+
+export function hasBlockingIssues(document: CardDocument): boolean {
+  return document.issues.some((issue) => issue.kind !== "level-jump");
 }
 
 export function withSyntheticRootHeading(source: string, title: string): string {
@@ -128,15 +133,24 @@ function toStructuralHeading(source: string, node: Heading): StructuralHeading |
 function validateHierarchy(headings: StructuralHeading[]): ParseIssue[] {
   const issues: ParseIssue[] = [];
   if (headings[0].level !== 1) {
-    issues.push({ line: headings[0].line, message: `The hierarchy must start at H1, not H${headings[0].level}.` });
+    issues.push({
+      kind: "missing-root",
+      line: headings[0].line,
+      message: `The hierarchy must start at H1, not H${headings[0].level}.`,
+      currentLevel: headings[0].level
+    });
   }
   for (let index = 1; index < headings.length; index += 1) {
     const previous = headings[index - 1];
     const current = headings[index];
     if (current.level > previous.level + 1) {
       issues.push({
+        kind: "level-jump",
         line: current.line,
-        message: `Heading jump from H${previous.level} to H${current.level}; only one level is allowed.`
+        message: `Heading jump from H${previous.level} to H${current.level}; H${previous.level + 1} is missing.`,
+        previousLevel: previous.level,
+        currentLevel: current.level,
+        expectedLevel: previous.level + 1
       });
     }
   }
