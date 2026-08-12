@@ -1,7 +1,7 @@
 {
   "id": "visual-card-writer",
   "name": "Visual Card Writer",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "minAppVersion": "1.12.2",
   "description": "Write and navigate Markdown through a visual hierarchy of cards.",
   "author": "David Hurtado",

@@ -1,12 +1,42 @@
 import { Notice, Plugin, TFile, normalizePath } from "obsidian";
 import { DocumentSessionRegistry } from "./session";
+import type { LayoutOrientation } from "./types";
 import { CARD_VIEW_TYPE, VisualCardWriterView } from "./view";
+
+interface VisualCardWriterSettings {
+  layoutOrientation: LayoutOrientation;
+}
+
+const DEFAULT_SETTINGS: VisualCardWriterSettings = {
+  layoutOrientation: "horizontal"
+};
 
 export default class VisualCardWriterPlugin extends Plugin {
   private readonly sessions = new DocumentSessionRegistry();
+  private pluginSettings: VisualCardWriterSettings = DEFAULT_SETTINGS;
 
   async onload(): Promise<void> {
-    this.registerView(CARD_VIEW_TYPE, (leaf) => new VisualCardWriterView(leaf, this.sessions));
+    this.pluginSettings = {
+      ...DEFAULT_SETTINGS,
+      ...((await this.loadData()) as Partial<VisualCardWriterSettings> | null)
+    };
+    if (
+      this.pluginSettings.layoutOrientation !== "horizontal" &&
+      this.pluginSettings.layoutOrientation !== "vertical"
+    ) {
+      this.pluginSettings.layoutOrientation = DEFAULT_SETTINGS.layoutOrientation;
+    }
+
+    this.registerView(
+      CARD_VIEW_TYPE,
+      (leaf) =>
+        new VisualCardWriterView(
+          leaf,
+          this.sessions,
+          this.pluginSettings.layoutOrientation,
+          (orientation) => this.saveLayoutOrientation(orientation)
+        )
+    );
 
     this.addCommand({
       id: "open-card-editor",
@@ -56,6 +86,18 @@ export default class VisualCardWriterPlugin extends Plugin {
           void view.createSiblingCardBelow();
         }
         return available;
+      }
+    });
+
+    this.addCommand({
+      id: "toggle-layout-orientation",
+      name: "Toggle horizontal or vertical card layout",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(VisualCardWriterView);
+        if (view && !checking) {
+          void view.toggleLayoutOrientation();
+        }
+        return view != null;
       }
     });
 
@@ -137,6 +179,21 @@ export default class VisualCardWriterPlugin extends Plugin {
       async (params) =>
         JSON.stringify(await this.requireActiveView().cycleEditorForDiagnostics(Number.parseInt(params.count, 10)))
     );
+
+    this.registerCliHandler(
+      "visual-card-writer:set-layout",
+      "Diagnostics: set the active card view layout orientation",
+      { orientation: { value: "<horizontal|vertical>", description: "Card layout orientation", required: true } },
+      async (params) => {
+        const orientation = params.orientation;
+        if (orientation !== "horizontal" && orientation !== "vertical") {
+          throw new Error(`Unsupported card layout orientation: ${orientation}`);
+        }
+        const view = this.requireActiveView();
+        await view.setLayoutOrientation(orientation);
+        return JSON.stringify(view.getDiagnostics());
+      }
+    );
   }
 
   onunload(): void {
@@ -169,5 +226,10 @@ export default class VisualCardWriterPlugin extends Plugin {
       throw new Error(`Markdown file not found: ${path}`);
     }
     return file;
+  }
+
+  private async saveLayoutOrientation(layoutOrientation: LayoutOrientation): Promise<void> {
+    this.pluginSettings = { ...this.pluginSettings, layoutOrientation };
+    await this.saveData(this.pluginSettings);
   }
 }

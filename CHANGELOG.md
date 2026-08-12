@@ -2,6 +2,12 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.7
+
+- Add a persistent **Horizontal / Vertical** orientation control to the card editor. Horizontal remains the default; vertical makes hierarchy levels grow downward and arranges sibling branches from left to right.
+- Rotate spatial keyboard navigation with the selected orientation while preserving the existing shortcuts and behavior in horizontal mode.
+- Keep editing, resizing, branch collapse, panning, zoom, animated selection, and standard Markdown shared between both layouts.
+
 ## 0.1.6
 
 - Keep the card editor available when Markdown skips a heading level. Affected cards now appear at their inferred logical depth with an amber hint instead of blocking the complete view.

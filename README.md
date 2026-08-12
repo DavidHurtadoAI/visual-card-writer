@@ -13,7 +13,8 @@ _GIF showing the UI in action_
 
 ## Features
 
-- Navigate a Markdown outline as aligned columns of cards.
+- Navigate a Markdown outline as aligned cards in a horizontal or vertical tree.
+- Switch between **Horizontal** and **Vertical** from the editor toolbar; the preference persists across plugin reloads.
 - Keep every branch visible with contextual dimming, or collapse complete subtrees.
 - Create child and sibling cards without leaving the visual editor.
 - Edit cards with an embedded CodeMirror 6 editor and essential Live Preview.
@@ -50,6 +51,12 @@ Skipped heading levels do not block the card editor. If an H3 follows an H1, for
 
 <img src="./skipped-heading-repair.png" width="900" alt="Visual Card Writer showing an H1-to-H3 heading jump and the local repair menu">
 
+### Horizontal and vertical layouts
+
+Horizontal layout remains the default and grows the hierarchy from left to right. Vertical layout transposes the same tree so hierarchy levels grow downward and sibling branches spread from left to right, which works better in portrait windows. Both orientations use the same Markdown, cards, folding state, zoom, editing, and resize controls.
+
+<img src="./vertical-card-layout.png" width="900" alt="Visual Card Writer showing a Markdown hierarchy growing downward in vertical layout">
+
 ## Installation
 
 ### Community plugins
@@ -72,7 +79,8 @@ Open a Markdown note and run **Visual Card Writer: Open current note in card edi
 - Click outside the card to save and leave editing.
 - Use the `+` button to create a child card.
 - Use a card's chevron to expand or collapse its children.
-- Drag the right edge to resize a column.
+- Choose **Horizontal** or **Vertical** in the toolbar to change the direction of the tree.
+- Drag the right edge to resize every card at that hierarchy level.
 - Drag the bottom edge to resize one card vertically.
 - Middle-drag the background to pan.
 - Hold `Ctrl`/`Cmd` and use the mouse wheel to zoom.
@@ -83,6 +91,7 @@ Open a Markdown note and run **Visual Card Writer: Open current note in card edi
 - **Visual Card Writer: Switch back to Markdown editor**
 - **Visual Card Writer: Add child card**
 - **Visual Card Writer: Add sibling card below**
+- **Visual Card Writer: Toggle horizontal or vertical card layout**
 
 ## Current limitations
 

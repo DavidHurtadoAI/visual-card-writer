@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeBranchAxisLayout,
   computeTreeLayout,
   getBranchCardIds,
   getCardEmphasis,
+  getLayoutNavigationKeys,
   getOpenBranchDescendants,
   getVisibleCards,
   groupCardsByDepth
@@ -130,5 +132,41 @@ describe("computeTreeLayout", () => {
 
     expect(collapsed.tops.get("card-3")).toBeLessThan(expanded.tops.get("card-3") ?? 0);
     expect(collapsed.tops.get("card-3")).toBe(72);
+  });
+});
+
+describe("orientation-aware layout", () => {
+  const dimensions = new Map(
+    document.cards.map((card) => [card.id, { width: card.id === "card-2" ? 240 : 100, height: 60 }])
+  );
+
+  it("preserves the existing vertical branch stacking in horizontal mode", () => {
+    const layout = computeBranchAxisLayout(document.cards, document.roots, dimensions, 12, "horizontal");
+
+    expect(layout.tops.get("card-0")).toBe(layout.tops.get("card-1"));
+    expect(layout.subtreeHeights.get("card-0")).toBe(132);
+  });
+
+  it("uses card widths to spread sibling branches in vertical mode", () => {
+    const layout = computeBranchAxisLayout(document.cards, document.roots, dimensions, 12, "vertical");
+
+    expect(layout.tops.get("card-0")).toBe(layout.tops.get("card-1"));
+    expect(layout.subtreeHeights.get("card-1")).toBe(240);
+    expect(layout.tops.get("card-3")).toBe(252);
+  });
+
+  it("rotates spatial keyboard navigation without changing horizontal mode", () => {
+    expect(getLayoutNavigationKeys("horizontal")).toEqual({
+      previous: "ArrowUp",
+      next: "ArrowDown",
+      parent: "ArrowLeft",
+      child: "ArrowRight"
+    });
+    expect(getLayoutNavigationKeys("vertical")).toEqual({
+      previous: "ArrowLeft",
+      next: "ArrowRight",
+      parent: "ArrowUp",
+      child: "ArrowDown"
+    });
   });
 });

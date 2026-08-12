@@ -23,6 +23,47 @@
   white-space: nowrap;
 }
 
+.visual-card-writer-orientation-group {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+}
+
+.visual-card-writer-orientation-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 7px;
+  gap: 5px;
+  border: 0;
+  border-radius: calc(var(--radius-s) - 2px);
+  box-shadow: none;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: var(--font-ui-smaller);
+}
+
+.visual-card-writer-orientation-button:hover,
+.visual-card-writer-orientation-button:focus-visible {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.visual-card-writer-orientation-button.is-active {
+  color: var(--text-normal);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+}
+
+.visual-card-writer-orientation-icon {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+}
+
 .visual-card-writer-zoom-indicator {
   flex: 0 0 auto;
   min-width: 52px;
@@ -158,6 +199,20 @@
   background: var(--background-primary);
   resize: none;
   transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.visual-card-writer-view.is-layout-vertical .visual-card-writer-surface {
+  flex-direction: column;
+}
+
+.visual-card-writer-view.is-layout-vertical .visual-card-writer-column {
+  width: var(--vcw-row-width, max-content);
+  height: var(--vcw-row-height, auto);
+}
+
+.visual-card-writer-view.is-layout-vertical .visual-card-writer-card {
+  top: 0;
+  left: var(--vcw-card-left, 0);
 }
 
 .visual-card-writer-view.is-layout-transitioning .visual-card-writer-card,
@@ -600,6 +655,10 @@
 }
 
 @media (max-width: 700px) {
+  .visual-card-writer-orientation-label {
+    display: none;
+  }
+
   .visual-card-writer-columns {
     padding: 10px;
     gap: 10px;

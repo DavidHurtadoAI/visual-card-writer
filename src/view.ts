@@ -37,9 +37,10 @@ import {
 } from "./parser";
 import { getHierarchyGuidance } from "./hierarchy-guidance";
 import {
-  computeTreeLayout,
+  computeBranchAxisLayout,
   getCardEmphasis,
   getBranchCardIds,
+  getLayoutNavigationKeys,
   getOpenBranchDescendants,
   getVisibleCards,
   groupCardsByDepth
@@ -57,7 +58,7 @@ import type { CardInsertionKind, CardInsertionResult, HeadingRepairResult } from
 import { essentialLivePreview } from "./live-preview";
 import { DocumentSession, DocumentSessionRegistry } from "./session";
 import type { SessionSnapshot } from "./session";
-import type { CardDocument, CardNode, ParseIssue, ViewDiagnostics } from "./types";
+import type { CardDocument, CardNode, LayoutOrientation, ParseIssue, ViewDiagnostics } from "./types";
 
 export const CARD_VIEW_TYPE = "visual-card-writer-view";
 
@@ -111,7 +112,12 @@ export class VisualCardWriterView extends TextFileView {
   private cardTransitionHiddenElements: HTMLElement[] = [];
   private cardTransitionCleanupTimer: number | null = null;
 
-  constructor(leaf: WorkspaceLeaf, private readonly sessions: DocumentSessionRegistry) {
+  constructor(
+    leaf: WorkspaceLeaf,
+    private readonly sessions: DocumentSessionRegistry,
+    private layoutOrientation: LayoutOrientation = "horizontal",
+    private readonly onLayoutOrientationChange: (orientation: LayoutOrientation) => Promise<void> | void = () => undefined
+  ) {
     super(leaf);
   }
 
@@ -175,11 +181,39 @@ export class VisualCardWriterView extends TextFileView {
 
   async onOpen(): Promise<void> {
     this.containerEl.addClass("visual-card-writer-view");
+    this.applyLayoutOrientationClass();
     this.registerDomEvent(this.contentEl, "click", (event) => this.handleViewClick(event));
     this.addAction("file-text", "Switch back to Markdown editor", () => {
       void this.switchToMarkdown();
     });
     await this.renderView();
+  }
+
+  async toggleLayoutOrientation(): Promise<void> {
+    await this.setLayoutOrientation(this.layoutOrientation === "horizontal" ? "vertical" : "horizontal");
+  }
+
+  async setLayoutOrientation(orientation: LayoutOrientation): Promise<void> {
+    if (orientation === this.layoutOrientation) {
+      return;
+    }
+    if (this.editor) {
+      await this.finishEditing(true);
+    }
+    this.cancelCardTransition();
+    this.cancelViewportScrollAnimation();
+    this.layoutOrientation = orientation;
+    this.applyLayoutOrientationClass();
+    try {
+      await this.onLayoutOrientationChange(orientation);
+    } catch (error) {
+      console.error("Visual Card Writer could not save the layout orientation.", error);
+      new Notice("The layout changed, but its preference could not be saved.");
+    }
+    await this.renderView();
+    if (this.selectedCardId) {
+      this.animateViewportToCard(this.selectedCardId);
+    }
   }
 
   async onClose(): Promise<void> {
@@ -411,7 +445,8 @@ export class VisualCardWriterView extends TextFileView {
       rememberedCardHeights: this.cardHeights.size,
       visibleCards: getVisibleCards(this.parsed.cards, this.collapsedCardIds).length,
       collapsedCards: this.collapsedCardIds.size,
-      zoomLevel: this.zoomLevel
+      zoomLevel: this.zoomLevel,
+      layoutOrientation: this.layoutOrientation
     };
   }
 
@@ -435,6 +470,12 @@ export class VisualCardWriterView extends TextFileView {
     const toolbar = this.contentEl.createDiv({ cls: "visual-card-writer-toolbar" });
     const title = toolbar.createDiv({ cls: "visual-card-writer-title" });
     title.setText(this.file?.basename ?? "Visual Card Writer");
+    const orientationGroup = toolbar.createDiv({
+      cls: "visual-card-writer-orientation-group",
+      attr: { role: "group", "aria-label": "Card layout orientation" }
+    });
+    this.createOrientationButton(orientationGroup, "horizontal", "columns-3", "Horizontal");
+    this.createOrientationButton(orientationGroup, "vertical", "rows-3", "Vertical");
     const zoomButton = toolbar.createEl("button", {
       cls: "visual-card-writer-zoom-indicator",
       text: `${Math.round(this.zoomLevel * 100)}%`,
@@ -544,7 +585,9 @@ export class VisualCardWriterView extends TextFileView {
         }
         cardElement.setAttribute(
           "title",
-          "Drag the right edge to resize the column or the bottom edge to resize this card. Double-click a handle to reset."
+          this.layoutOrientation === "horizontal"
+            ? "Drag the right edge to resize the column or the bottom edge to resize this card. Double-click a handle to reset."
+            : "Drag the right edge to resize every card at this level or the bottom edge to resize this card. Double-click a handle to reset."
         );
         if (hasChildren) {
           cardElement.setAttribute("aria-expanded", String(!isCollapsed));
@@ -685,18 +728,19 @@ export class VisualCardWriterView extends TextFileView {
     }
     const index = siblings.indexOf(card.id);
     let target: string | null = null;
-    if (event.key === "ArrowUp" || event.key === "Home") {
+    const navigationKeys = getLayoutNavigationKeys(this.layoutOrientation);
+    if (event.key === navigationKeys.previous || event.key === "Home") {
       target = siblings[event.key === "Home" ? 0 : Math.max(0, index - 1)] ?? null;
-    } else if (event.key === "ArrowDown" || event.key === "End") {
+    } else if (event.key === navigationKeys.next || event.key === "End") {
       target = siblings[event.key === "End" ? siblings.length - 1 : Math.min(siblings.length - 1, index + 1)] ?? null;
-    } else if (event.key === "ArrowLeft") {
+    } else if (event.key === navigationKeys.parent) {
       if (card.children.length > 0 && !this.collapsedCardIds.has(card.id)) {
         event.preventDefault();
         void this.toggleCardCollapsed(card.id);
         return;
       }
       target = card.parentId;
-    } else if (event.key === "ArrowRight") {
+    } else if (event.key === navigationKeys.child) {
       if (card.children.length > 0 && this.collapsedCardIds.has(card.id)) {
         event.preventDefault();
         void this.toggleCardCollapsed(card.id);
@@ -1635,46 +1679,88 @@ export class VisualCardWriterView extends TextFileView {
     if (!columnsElement) {
       return;
     }
-    const heights = new Map<string, number>();
     const visibleCards = getVisibleCards(this.parsed.cards, this.collapsedCardIds);
+    const cardElements = new Map<string, HTMLElement>();
     for (const card of visibleCards) {
       const element = this.cardElement(card.id);
       if (element) {
-        heights.set(card.id, element.offsetHeight);
+        cardElements.set(card.id, element);
       }
     }
     const gap = 12;
-    const layout = computeTreeLayout(visibleCards, this.parsed.roots, heights, gap);
+    const cardDimensions = new Map(
+      [...cardElements].map(([id, element]) => [
+        id,
+        { width: element.offsetWidth, height: element.offsetHeight }
+      ])
+    );
+    const layout = computeBranchAxisLayout(
+      visibleCards,
+      this.parsed.roots,
+      cardDimensions,
+      gap,
+      this.layoutOrientation
+    );
     for (const card of visibleCards) {
-      const element = this.cardElement(card.id);
-      const top = layout.tops.get(card.id);
-      if (element && top != null) {
-        element.style.setProperty("--vcw-card-top", `${Math.round(top)}px`);
+      const element = cardElements.get(card.id);
+      const offset = layout.tops.get(card.id);
+      if (element && offset != null) {
+        element.style.setProperty(
+          this.layoutOrientation === "horizontal" ? "--vcw-card-top" : "--vcw-card-left",
+          `${Math.round(offset)}px`
+        );
       }
     }
     const columnElements = [...columnsElement.querySelectorAll<HTMLElement>(".visual-card-writer-column")];
-    for (const column of columnElements) {
-      const cards = [...column.querySelectorAll<HTMLElement>(".visual-card-writer-card")];
-      const width = cards.reduce((maximum, card) => Math.max(maximum, card.offsetWidth), 0);
-      column.style.setProperty("--vcw-layout-column-width", `${Math.ceil(width)}px`);
-      column.style.setProperty("--vcw-column-height", `${Math.ceil(layout.totalHeight)}px`);
-    }
     const surface = columnsElement.querySelector<HTMLElement>(".visual-card-writer-surface");
     const scene = columnsElement.querySelector<HTMLElement>(".visual-card-writer-scene");
     if (surface && scene) {
-      const gap = Number.parseFloat(window.getComputedStyle(surface).columnGap) || 0;
-      const surfaceWidth =
-        columnElements.reduce((total, column) => total + column.offsetWidth, 0) +
-        Math.max(0, columnElements.length - 1) * gap;
-      const trailingWorkspaceWidth = Math.max(
-        240,
-        Math.min(480, (columnsElement.clientWidth / this.zoomLevel) * 0.4)
-      );
-      const sceneWidth = surfaceWidth + trailingWorkspaceWidth;
+      const surfaceStyle = window.getComputedStyle(surface);
+      let surfaceWidth: number;
+      let surfaceHeight: number;
+      let sceneWidth: number;
+      let sceneHeight: number;
+      if (this.layoutOrientation === "horizontal") {
+        for (const column of columnElements) {
+          const cards = [...column.querySelectorAll<HTMLElement>(".visual-card-writer-card")];
+          const width = cards.reduce((maximum, card) => Math.max(maximum, card.offsetWidth), 0);
+          column.style.setProperty("--vcw-layout-column-width", `${Math.ceil(width)}px`);
+          column.style.setProperty("--vcw-column-height", `${Math.ceil(layout.totalHeight)}px`);
+        }
+        const columnGap = Number.parseFloat(surfaceStyle.columnGap) || 0;
+        surfaceWidth =
+          columnElements.reduce((total, column) => total + column.offsetWidth, 0) +
+          Math.max(0, columnElements.length - 1) * columnGap;
+        surfaceHeight = layout.totalHeight;
+        const trailingWorkspaceWidth = Math.max(
+          240,
+          Math.min(480, (columnsElement.clientWidth / this.zoomLevel) * 0.4)
+        );
+        sceneWidth = surfaceWidth + trailingWorkspaceWidth;
+        sceneHeight = surfaceHeight;
+      } else {
+        for (const row of columnElements) {
+          const cards = [...row.querySelectorAll<HTMLElement>(".visual-card-writer-card")];
+          const height = cards.reduce((maximum, card) => Math.max(maximum, card.offsetHeight), 0);
+          row.style.setProperty("--vcw-row-width", `${Math.ceil(layout.totalHeight)}px`);
+          row.style.setProperty("--vcw-row-height", `${Math.ceil(height)}px`);
+        }
+        const rowGap = Number.parseFloat(surfaceStyle.rowGap) || 0;
+        surfaceWidth = layout.totalHeight;
+        surfaceHeight =
+          columnElements.reduce((total, row) => total + row.offsetHeight, 0) +
+          Math.max(0, columnElements.length - 1) * rowGap;
+        const trailingWorkspaceHeight = Math.max(
+          240,
+          Math.min(480, (columnsElement.clientHeight / this.zoomLevel) * 0.4)
+        );
+        sceneWidth = surfaceWidth;
+        sceneHeight = surfaceHeight + trailingWorkspaceHeight;
+      }
       surface.style.setProperty("--vcw-surface-width", `${Math.ceil(surfaceWidth)}px`);
-      surface.style.setProperty("--vcw-surface-height", `${Math.ceil(layout.totalHeight)}px`);
+      surface.style.setProperty("--vcw-surface-height", `${Math.ceil(surfaceHeight)}px`);
       scene.dataset.worldWidth = String(sceneWidth);
-      scene.dataset.worldHeight = String(layout.totalHeight);
+      scene.dataset.worldHeight = String(sceneHeight);
       this.applyZoomGeometry(columnsElement);
     }
     columnsElement.addClass("is-laid-out");
@@ -1687,6 +1773,35 @@ export class VisualCardWriterView extends TextFileView {
       window.cancelAnimationFrame(this.layoutAnimationFrame);
       this.layoutAnimationFrame = null;
     }
+  }
+
+  private createOrientationButton(
+    parent: HTMLElement,
+    orientation: LayoutOrientation,
+    icon: string,
+    label: string
+  ): void {
+    const active = orientation === this.layoutOrientation;
+    const button = parent.createEl("button", {
+      cls: ["visual-card-writer-orientation-button", active ? "is-active" : ""],
+      attr: {
+        "aria-label": `${label} card layout`,
+        "aria-pressed": String(active),
+        title: `${label} card layout`
+      }
+    });
+    setIcon(button.createSpan({ cls: "visual-card-writer-orientation-icon" }), icon);
+    button.createSpan({ cls: "visual-card-writer-orientation-label", text: label });
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.setLayoutOrientation(orientation);
+    });
+  }
+
+  private applyLayoutOrientationClass(): void {
+    this.containerEl.toggleClass("is-layout-horizontal", this.layoutOrientation === "horizontal");
+    this.containerEl.toggleClass("is-layout-vertical", this.layoutOrientation === "vertical");
   }
 
   private bindSession(path: string, initialText: string): void {

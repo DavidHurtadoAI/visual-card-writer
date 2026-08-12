@@ -1,4 +1,4 @@
-import type { CardNode } from "./types";
+import type { CardNode, LayoutOrientation } from "./types";
 
 export type CardEmphasis = "selected" | "active-path" | "next-choice" | "deemphasized";
 
@@ -6,6 +6,18 @@ export interface TreeLayout {
   tops: Map<string, number>;
   subtreeHeights: Map<string, number>;
   totalHeight: number;
+}
+
+export interface CardDimensions {
+  width: number;
+  height: number;
+}
+
+export interface LayoutNavigationKeys {
+  previous: "ArrowUp" | "ArrowLeft";
+  next: "ArrowDown" | "ArrowRight";
+  parent: "ArrowLeft" | "ArrowUp";
+  child: "ArrowRight" | "ArrowDown";
 }
 
 export function groupCardsByDepth(cards: CardNode[]): string[][] {
@@ -141,4 +153,26 @@ export function computeTreeLayout(
     subtreeHeights,
     totalHeight: roots.length > 0 ? Math.max(0, rootTop - gap) : 0
   };
+}
+
+export function computeBranchAxisLayout(
+  cards: CardNode[],
+  roots: string[],
+  cardDimensions: ReadonlyMap<string, CardDimensions>,
+  gap: number,
+  orientation: LayoutOrientation
+): TreeLayout {
+  const branchSizes = new Map(
+    [...cardDimensions].map(([id, dimensions]) => [
+      id,
+      orientation === "horizontal" ? dimensions.height : dimensions.width
+    ])
+  );
+  return computeTreeLayout(cards, roots, branchSizes, gap);
+}
+
+export function getLayoutNavigationKeys(orientation: LayoutOrientation): LayoutNavigationKeys {
+  return orientation === "horizontal"
+    ? { previous: "ArrowUp", next: "ArrowDown", parent: "ArrowLeft", child: "ArrowRight" }
+    : { previous: "ArrowLeft", next: "ArrowRight", parent: "ArrowUp", child: "ArrowDown" };
 }
