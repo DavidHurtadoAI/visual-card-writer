@@ -2,7 +2,7 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
-## Unreleased
+## 0.1.6
 
 - Keep the card editor available when Markdown skips a heading level. Affected cards now appear at their inferred logical depth with an amber hint instead of blocking the complete view.
 - Let the heading hint promote only the affected branch, insert the missing parent card, open the Markdown editor, or keep the original structure unchanged.
