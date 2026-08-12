@@ -10,4 +10,5 @@ Thumbs.db
 
 # Local development evidence and historical captures
 *.png
+!skipped-heading-repair.png
 SPIKE_REPORT.md
