@@ -44,6 +44,8 @@ export interface CardDocument {
   prologue: string;
 }
 
+export type LayoutOrientation = "horizontal" | "vertical";
+
 export interface ViewDiagnostics {
   viewType: string;
   file: string | null;
@@ -63,4 +65,5 @@ export interface ViewDiagnostics {
   visibleCards: number;
   collapsedCards: number;
   zoomLevel: number;
+  layoutOrientation: LayoutOrientation;
 }

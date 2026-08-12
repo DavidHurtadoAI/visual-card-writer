@@ -23,6 +23,33 @@
   white-space: nowrap;
 }
 
+.visual-card-writer-orientation-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 8px;
+  gap: 5px;
+  border: 0;
+  border-radius: var(--radius-s);
+  box-shadow: none;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  font-size: var(--font-ui-smaller);
+}
+
+.visual-card-writer-orientation-toggle:hover,
+.visual-card-writer-orientation-toggle:focus-visible {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.visual-card-writer-orientation-icon {
+  display: inline-flex;
+  width: 15px;
+  height: 15px;
+}
+
 .visual-card-writer-zoom-indicator {
   flex: 0 0 auto;
   min-width: 52px;
@@ -100,6 +127,38 @@
   gap: var(--visual-card-writer-column-gap);
   transform: scale(var(--vcw-zoom, 1));
   transform-origin: top left;
+  isolation: isolate;
+}
+
+.visual-card-writer-connectors {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.visual-card-writer-connector {
+  color: var(--text-faint);
+  opacity: 0.62;
+}
+
+.visual-card-writer-connector[data-emphasis="selected"],
+.visual-card-writer-connector[data-emphasis="active-path"] {
+  color: var(--text-muted);
+  opacity: 0.82;
+}
+
+.visual-card-writer-connector-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.visual-card-writer-connector-arrow {
+  fill: currentColor;
 }
 
 .visual-card-writer-view.is-layout-transitioning .visual-card-writer-columns {
@@ -128,6 +187,7 @@
 
 .visual-card-writer-column {
   position: relative;
+  z-index: 1;
   display: block;
   flex: 0 0 auto;
   width: var(--vcw-column-width, var(--vcw-layout-column-width, max-content));
@@ -158,6 +218,20 @@
   background: var(--background-primary);
   resize: none;
   transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.visual-card-writer-view.is-layout-vertical .visual-card-writer-surface {
+  flex-direction: column;
+}
+
+.visual-card-writer-view.is-layout-vertical .visual-card-writer-column {
+  width: var(--vcw-row-width, max-content);
+  height: var(--vcw-row-height, auto);
+}
+
+.visual-card-writer-view.is-layout-vertical .visual-card-writer-card {
+  top: 0;
+  left: var(--vcw-card-left, 0);
 }
 
 .visual-card-writer-view.is-layout-transitioning .visual-card-writer-card,

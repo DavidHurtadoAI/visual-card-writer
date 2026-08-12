@@ -13,7 +13,9 @@ _GIF showing the UI in action_
 
 ## Features
 
-- Navigate a Markdown outline as aligned columns of cards.
+- Navigate a Markdown outline as aligned cards in a horizontal or vertical tree.
+- Switch between **Horizontal** and **Vertical** with one toolbar toggle that shows the current mode with both text and icon. Each card editor opens in Horizontal mode.
+- Follow subtle orthogonal arrows from each card to all its visible direct children without adding extra space between cards.
 - Keep every branch visible with contextual dimming, or collapse complete subtrees.
 - Create child and sibling cards without leaving the visual editor.
 - Edit cards with an embedded CodeMirror 6 editor and essential Live Preview.
@@ -50,6 +52,12 @@ Skipped heading levels do not block the card editor. If an H3 follows an H1, for
 
 <img src="./skipped-heading-repair.png" width="900" alt="Visual Card Writer showing an H1-to-H3 heading jump and the local repair menu">
 
+### Horizontal and vertical layouts
+
+Horizontal layout remains the default and grows the hierarchy from left to right. Vertical layout transposes the same tree so hierarchy levels grow downward and sibling branches spread from left to right, which works better in portrait windows. Subtle right-angle connectors branch from each card to every visible direct child and rotate with the layout, making both reading direction and sibling relationships explicit without increasing the gaps. Both orientations use the same Markdown, cards, folding state, zoom, editing, and resize controls.
+
+<img src="./vertical-card-layout.jpg" width="900" alt="Visual Card Writer showing the single Vertical orientation toggle and a Markdown hierarchy growing downward">
+
 ## Installation
 
 ### Community plugins
@@ -72,7 +80,8 @@ Open a Markdown note and run **Visual Card Writer: Open current note in card edi
 - Click outside the card to save and leave editing.
 - Use the `+` button to create a child card.
 - Use a card's chevron to expand or collapse its children.
-- Drag the right edge to resize a column.
+- Use the orientation toggle in the toolbar to change the direction of the tree. Its text and icon show the current mode; a newly opened card editor always starts in **Horizontal**.
+- Drag the right edge to resize every card at that hierarchy level.
 - Drag the bottom edge to resize one card vertically.
 - Middle-drag the background to pan.
 - Hold `Ctrl`/`Cmd` and use the mouse wheel to zoom.
@@ -83,6 +92,7 @@ Open a Markdown note and run **Visual Card Writer: Open current note in card edi
 - **Visual Card Writer: Switch back to Markdown editor**
 - **Visual Card Writer: Add child card**
 - **Visual Card Writer: Add sibling card below**
+- **Visual Card Writer: Toggle horizontal or vertical card layout**
 
 ## Current limitations
 

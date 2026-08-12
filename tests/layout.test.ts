@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeBranchAxisLayout,
   computeTreeLayout,
   getBranchCardIds,
   getCardEmphasis,
+  getOrthogonalConnectorGeometry,
+  getLayoutNavigationKeys,
   getOpenBranchDescendants,
   getVisibleCards,
   groupCardsByDepth
@@ -130,5 +133,79 @@ describe("computeTreeLayout", () => {
 
     expect(collapsed.tops.get("card-3")).toBeLessThan(expanded.tops.get("card-3") ?? 0);
     expect(collapsed.tops.get("card-3")).toBe(72);
+  });
+});
+
+describe("orientation-aware layout", () => {
+  const dimensions = new Map(
+    document.cards.map((card) => [card.id, { width: card.id === "card-2" ? 240 : 100, height: 60 }])
+  );
+
+  it("preserves the existing vertical branch stacking in horizontal mode", () => {
+    const layout = computeBranchAxisLayout(document.cards, document.roots, dimensions, 12, "horizontal");
+
+    expect(layout.tops.get("card-0")).toBe(layout.tops.get("card-1"));
+    expect(layout.subtreeHeights.get("card-0")).toBe(132);
+  });
+
+  it("uses card widths to spread sibling branches in vertical mode", () => {
+    const layout = computeBranchAxisLayout(document.cards, document.roots, dimensions, 12, "vertical");
+
+    expect(layout.tops.get("card-0")).toBe(layout.tops.get("card-1"));
+    expect(layout.subtreeHeights.get("card-1")).toBe(240);
+    expect(layout.tops.get("card-3")).toBe(252);
+  });
+
+  it("rotates spatial keyboard navigation without changing horizontal mode", () => {
+    expect(getLayoutNavigationKeys("horizontal")).toEqual({
+      previous: "ArrowUp",
+      next: "ArrowDown",
+      parent: "ArrowLeft",
+      child: "ArrowRight"
+    });
+    expect(getLayoutNavigationKeys("vertical")).toEqual({
+      previous: "ArrowLeft",
+      next: "ArrowRight",
+      parent: "ArrowUp",
+      child: "ArrowDown"
+    });
+  });
+});
+
+describe("orthogonal child connectors", () => {
+  const parent = { left: 10, top: 20, width: 100, height: 60 };
+
+  it("branches at right angles from a parent to every visible child in horizontal mode", () => {
+    const geometry = getOrthogonalConnectorGeometry(
+      parent,
+      [
+        { left: 128, top: 110, width: 120, height: 80 },
+        { left: 128, top: 220, width: 120, height: 60 }
+      ],
+      "horizontal"
+    );
+
+    expect(geometry.arrowTips).toEqual([
+      { x: 128, y: 150 },
+      { x: 128, y: 250 }
+    ]);
+    expect(geometry.path).toBe("M 110 50 H 119 M 119 50 V 250 M 119 150 H 124 M 119 250 H 124");
+  });
+
+  it("branches at right angles from a parent to every visible child in vertical mode", () => {
+    const geometry = getOrthogonalConnectorGeometry(
+      parent,
+      [
+        { left: 128, top: 110, width: 120, height: 80 },
+        { left: 280, top: 110, width: 80, height: 60 }
+      ],
+      "vertical"
+    );
+
+    expect(geometry.arrowTips).toEqual([
+      { x: 188, y: 110 },
+      { x: 320, y: 110 }
+    ]);
+    expect(geometry.path).toBe("M 60 80 V 95 M 60 95 H 320 M 188 95 V 106 M 320 95 V 106");
   });
 });

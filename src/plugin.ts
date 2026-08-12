@@ -59,6 +59,18 @@ export default class VisualCardWriterPlugin extends Plugin {
       }
     });
 
+    this.addCommand({
+      id: "toggle-layout-orientation",
+      name: "Toggle horizontal or vertical card layout",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(VisualCardWriterView);
+        if (view && !checking) {
+          void view.toggleLayoutOrientation();
+        }
+        return view != null;
+      }
+    });
+
     this.registerCliHandler(
       "visual-card-writer:open",
       "Open a Markdown file in Visual Card Writer",
@@ -136,6 +148,21 @@ export default class VisualCardWriterPlugin extends Plugin {
       { count: { value: "<number>", description: "Cycles, from 1 to 200", required: true } },
       async (params) =>
         JSON.stringify(await this.requireActiveView().cycleEditorForDiagnostics(Number.parseInt(params.count, 10)))
+    );
+
+    this.registerCliHandler(
+      "visual-card-writer:set-layout",
+      "Diagnostics: set the active card view layout orientation",
+      { orientation: { value: "<horizontal|vertical>", description: "Card layout orientation", required: true } },
+      async (params) => {
+        const orientation = params.orientation;
+        if (orientation !== "horizontal" && orientation !== "vertical") {
+          throw new Error(`Unsupported card layout orientation: ${orientation}`);
+        }
+        const view = this.requireActiveView();
+        await view.setLayoutOrientation(orientation);
+        return JSON.stringify(view.getDiagnostics());
+      }
     );
   }
 
