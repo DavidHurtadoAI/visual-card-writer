@@ -1,6 +1,7 @@
 import {
   Component,
   MarkdownRenderer,
+  Menu,
   Notice,
   TextFileView,
   WorkspaceLeaf,
@@ -26,14 +27,22 @@ import {
   keymap,
   rectangularSelection
 } from "@codemirror/view";
-import { needsRootHeading, parseCardDocument, reconcileCard, replaceCardFragment, withSyntheticRootHeading } from "./parser";
+import {
+  hasBlockingIssues,
+  needsRootHeading,
+  parseCardDocument,
+  reconcileCard,
+  replaceCardFragment,
+  withSyntheticRootHeading
+} from "./parser";
+import { getHierarchyGuidance } from "./hierarchy-guidance";
 import {
   computeTreeLayout,
   getCardEmphasis,
   getBranchCardIds,
   getOpenBranchDescendants,
   getVisibleCards,
-  groupCardsByLevel
+  groupCardsByDepth
 } from "./layout";
 import {
   anchoredScrollOffset,
@@ -43,12 +52,12 @@ import {
   scrollAnimationDuration,
   zoomFromWheel
 } from "./navigation";
-import { insertCard } from "./operations";
-import type { CardInsertionKind, CardInsertionResult } from "./operations";
+import { insertCard, insertMissingParent, promoteCardBranch } from "./operations";
+import type { CardInsertionKind, CardInsertionResult, HeadingRepairResult } from "./operations";
 import { essentialLivePreview } from "./live-preview";
 import { DocumentSession, DocumentSessionRegistry } from "./session";
 import type { SessionSnapshot } from "./session";
-import type { CardDocument, CardNode, ViewDiagnostics } from "./types";
+import type { CardDocument, CardNode, ParseIssue, ViewDiagnostics } from "./types";
 
 export const CARD_VIEW_TYPE = "visual-card-writer-view";
 
@@ -67,6 +76,8 @@ interface CardTransitionSnapshot {
   scrollTop: number;
   items: CardTransitionItem[];
 }
+
+type LevelJumpIssue = Extract<ParseIssue, { kind: "level-jump" }>;
 
 export class VisualCardWriterView extends TextFileView {
   private parsed: CardDocument = { cards: [], roots: [], issues: [], prologue: "" };
@@ -260,7 +271,7 @@ export class VisualCardWriterView extends TextFileView {
               this.data.slice(0, this.editingRangeStart) +
               fragment +
               this.data.slice(this.editingRangeEnd);
-            if (parseCardDocument(candidate).issues.length > 0) {
+            if (hasBlockingIssues(parseCardDocument(candidate))) {
               new Notice("That edit would create an invalid ATX hierarchy.");
               return [];
             }
@@ -365,11 +376,11 @@ export class VisualCardWriterView extends TextFileView {
 
   canCreateChildCard(cardId = this.selectedCardId): boolean {
     const card = cardId ? this.cardById(cardId) : null;
-    return card != null && card.level < 6 && this.parsed.issues.length === 0 && !this.sessionConflict;
+    return card != null && card.level < 6 && !hasBlockingIssues(this.parsed) && !this.sessionConflict;
   }
 
   canCreateSiblingCard(cardId = this.selectedCardId): boolean {
-    return cardId != null && this.cardById(cardId) != null && this.parsed.issues.length === 0 && !this.sessionConflict;
+    return cardId != null && this.cardById(cardId) != null && !hasBlockingIssues(this.parsed) && !this.sessionConflict;
   }
 
   async createChildCard(cardId = this.selectedCardId): Promise<void> {
@@ -444,13 +455,27 @@ export class VisualCardWriterView extends TextFileView {
     setIcon(markdownButton, "file-text");
     markdownButton.addEventListener("click", () => void this.switchToMarkdown());
 
-    if (this.parsed.issues.length > 0) {
-      const errors = this.contentEl.createDiv({ cls: "visual-card-writer-errors" });
-      errors.createEl("h3", { text: "This note is not card-compatible yet" });
-      const list = errors.createEl("ul");
-      for (const issue of this.parsed.issues) {
-        list.createEl("li", { text: `Line ${issue.line}: ${issue.message}` });
+    const blockingIssues = this.parsed.issues.filter((issue) => issue.kind !== "level-jump");
+    if (blockingIssues.length > 0) {
+      const guidancePanel = this.contentEl.createDiv({
+        cls: "visual-card-writer-hierarchy-guidance",
+        attr: { role: "note", "aria-label": "Heading structure guidance" }
+      });
+      guidancePanel.createEl("h3", { text: "This note needs a small heading adjustment" });
+      guidancePanel.createEl("p", {
+        text: "Your existing headings have not been rewritten. Visual Card Writer needs consecutive heading levels to build clear parent-child relationships between cards."
+      });
+      const list = guidancePanel.createEl("ul");
+      for (const issue of blockingIssues) {
+        const guidance = getHierarchyGuidance(issue);
+        const item = list.createEl("li");
+        item.createEl("strong", { text: guidance.title });
+        item.createEl("p", { text: guidance.explanation });
+        item.createEl("p", { cls: "visual-card-writer-hierarchy-resolution", text: guidance.resolution });
       }
+      const actions = guidancePanel.createDiv({ cls: "visual-card-writer-hierarchy-actions" });
+      const openMarkdownButton = actions.createEl("button", { text: "Open Markdown editor" });
+      openMarkdownButton.addEventListener("click", () => void this.switchToMarkdown());
       return;
     }
 
@@ -472,7 +497,7 @@ export class VisualCardWriterView extends TextFileView {
     const surface = scene.createDiv({ cls: "visual-card-writer-surface" });
     this.configureViewport(columnsElement);
     const visibleCards = getVisibleCards(this.parsed.cards, this.collapsedCardIds);
-    const columns = groupCardsByLevel(visibleCards);
+    const columns = groupCardsByDepth(visibleCards);
     const activePathIds = new Set(path.map((card) => card.id));
     for (let depth = 0; depth < columns.length; depth += 1) {
       const ids = columns[depth];
@@ -492,19 +517,21 @@ export class VisualCardWriterView extends TextFileView {
         const emphasis = getCardEmphasis(card, this.selectedCardId, activePathIds);
         const hasChildren = card.children.length > 0;
         const isCollapsed = this.collapsedCardIds.has(card.id);
+        const headingJump = this.headingJumpForCard(card);
         const cardElement = column.createEl("article", {
           cls: [
             "visual-card-writer-card",
             `is-${emphasis}`,
             hasChildren ? "has-children" : "",
-            isCollapsed ? "is-collapsed" : ""
+            isCollapsed ? "is-collapsed" : "",
+            headingJump ? "has-heading-jump" : ""
           ],
           attr: {
             "data-card-id": card.id,
             "data-level": String(card.level),
             role: "treeitem",
             tabindex: "0",
-            "aria-level": String(card.level),
+            "aria-level": String(card.depth + 1),
             "aria-posinset": String(index + 1),
             "aria-setsize": String(ids.length),
             "aria-selected": String(card.id === this.selectedCardId),
@@ -536,6 +563,26 @@ export class VisualCardWriterView extends TextFileView {
           });
           toggle.addEventListener("dblclick", (event) => event.stopPropagation());
           toggle.addEventListener("keydown", (event) => event.stopPropagation());
+        }
+        if (headingJump) {
+          const guidance = getHierarchyGuidance(headingJump);
+          const warningButton = cardElement.createEl("button", {
+            cls: "visual-card-writer-heading-jump",
+            attr: {
+              "aria-label": `${guidance.title}. Open repair options.`,
+              title: `${guidance.explanation} ${guidance.resolution}`
+            }
+          });
+          const warningIcon = warningButton.createSpan({ cls: "visual-card-writer-heading-jump-icon" });
+          setIcon(warningIcon, "triangle-alert");
+          warningButton.createSpan({ text: `H${headingJump.currentLevel} · expected H${headingJump.expectedLevel}` });
+          warningButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.showHeadingJumpMenu(event, card, headingJump);
+          });
+          warningButton.addEventListener("dblclick", (event) => event.stopPropagation());
+          warningButton.addEventListener("keydown", (event) => event.stopPropagation());
         }
         const editButton = cardElement.createEl("button", {
           cls: ["visual-card-writer-edit-button", "clickable-icon"],
@@ -748,6 +795,109 @@ export class VisualCardWriterView extends TextFileView {
       new Notice(`The card was created, but its editor could not be opened: ${message}`);
       await this.renderView();
     }
+  }
+
+  private showHeadingJumpMenu(event: MouseEvent, card: CardNode, issue: LevelJumpIssue): void {
+    const menu = new Menu();
+    menu.addItem((item) =>
+      item
+        .setTitle(`Line ${issue.line}: H${issue.currentLevel} follows H${issue.previousLevel}`)
+        .setIcon("triangle-alert")
+        .setDisabled(true)
+    );
+    menu.addSeparator();
+    menu.addItem((item) =>
+      item
+        .setTitle(`Move this branch to H${issue.expectedLevel}`)
+        .setIcon("arrow-up")
+        .onClick(() => void this.repairHeadingJump(card.id, issue, "promote"))
+    );
+    menu.addItem((item) =>
+      item
+        .setTitle(`Insert missing H${issue.expectedLevel} parent`)
+        .setIcon("list-plus")
+        .onClick(() => void this.repairHeadingJump(card.id, issue, "insert-parent"))
+    );
+    menu.addSeparator();
+    menu.addItem((item) =>
+      item
+        .setTitle("Open Markdown editor")
+        .setIcon("file-text")
+        .onClick(() => void this.switchToMarkdown())
+    );
+    menu.addItem((item) => item.setTitle("Keep as written").setIcon("check"));
+    menu.showAtMouseEvent(event);
+  }
+
+  private async repairHeadingJump(
+    cardId: string,
+    issue: LevelJumpIssue,
+    action: "promote" | "insert-parent"
+  ): Promise<void> {
+    if (this.editor) {
+      await this.finishEditing(true);
+    }
+    if (this.sessionConflict) {
+      new Notice("Resolve the external edit conflict before repairing the heading structure.");
+      return;
+    }
+
+    const previousData = this.data;
+    const previousDocument = this.parsed;
+    const previousSelectedCardId = this.selectedCardId;
+    const previousCollapsedCardIds = new Set(this.collapsedCardIds);
+    const previousCardHeights = new Map(this.cardHeights);
+
+    try {
+      const result = action === "promote"
+        ? promoteCardBranch(this.data, this.parsed, cardId, issue.expectedLevel)
+        : insertMissingParent(this.data, this.parsed, cardId, issue.expectedLevel);
+      this.applyHeadingRepair(result);
+      await this.save();
+      await this.renderView();
+      if (action === "insert-parent") {
+        await this.startEditing(result.selectedCardId, true);
+        new Notice(`Inserted an H${issue.expectedLevel} parent. Give the new card a title.`);
+      } else {
+        new Notice(`Moved this branch from H${issue.currentLevel} to H${issue.expectedLevel}.`);
+      }
+    } catch (error) {
+      this.data = previousData;
+      this.parsed = previousDocument;
+      this.selectedCardId = previousSelectedCardId;
+      this.collapsedCardIds = previousCollapsedCardIds;
+      this.cardHeights = previousCardHeights;
+      if (this.session?.text !== previousData) {
+        this.session?.commit(previousData, this, "local");
+      }
+      await this.renderView();
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`Could not repair this heading jump: ${message}`);
+    }
+  }
+
+  private applyHeadingRepair(result: HeadingRepairResult): void {
+    const remappedCollapsedCardIds = new Set<string>();
+    for (const cardId of this.collapsedCardIds) {
+      const nextCardId = result.previousToNextCardIds.get(cardId);
+      if (nextCardId) {
+        remappedCollapsedCardIds.add(nextCardId);
+      }
+    }
+    const remappedCardHeights = new Map<string, number>();
+    for (const [cardId, height] of this.cardHeights) {
+      const nextCardId = result.previousToNextCardIds.get(cardId);
+      if (nextCardId) {
+        remappedCardHeights.set(nextCardId, height);
+      }
+    }
+    remappedCollapsedCardIds.delete(result.selectedCardId);
+    this.data = result.text;
+    this.parsed = result.document;
+    this.selectedCardId = result.selectedCardId;
+    this.collapsedCardIds = remappedCollapsedCardIds;
+    this.cardHeights = remappedCardHeights;
+    this.session?.commit(this.data, this, "local");
   }
 
   private selectedPath(): CardNode[] {
@@ -1631,7 +1781,7 @@ export class VisualCardWriterView extends TextFileView {
       void this.save();
     }
     let initializingCollapseState = false;
-    if (!this.collapseStateInitialized && this.parsed.issues.length === 0 && this.parsed.cards.length > 0) {
+    if (!this.collapseStateInitialized && !hasBlockingIssues(this.parsed) && this.parsed.cards.length > 0) {
       this.collapsedCardIds = new Set(getBranchCardIds(this.parsed.cards));
       this.collapseStateInitialized = true;
       initializingCollapseState = true;
@@ -1642,7 +1792,7 @@ export class VisualCardWriterView extends TextFileView {
         this.cardHeights.delete(cardId);
       }
     }
-    const depths = new Set(this.parsed.cards.map((card) => card.level - 1));
+    const depths = new Set(this.parsed.cards.map((card) => card.depth));
     for (const depth of this.columnWidths.keys()) {
       if (!depths.has(depth)) {
         this.columnWidths.delete(depth);
@@ -1703,6 +1853,12 @@ export class VisualCardWriterView extends TextFileView {
 
   private cardById(id: string): CardNode | null {
     return this.parsed.cards.find((card) => card.id === id) ?? null;
+  }
+
+  private headingJumpForCard(card: CardNode): LevelJumpIssue | null {
+    return this.parsed.issues.find(
+      (issue): issue is LevelJumpIssue => issue.kind === "level-jump" && issue.line === card.range.line
+    ) ?? null;
   }
 
   private cardElement(id: string): HTMLElement | null {

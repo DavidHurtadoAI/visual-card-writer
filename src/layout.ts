@@ -8,10 +8,10 @@ export interface TreeLayout {
   totalHeight: number;
 }
 
-export function groupCardsByLevel(cards: CardNode[]): string[][] {
+export function groupCardsByDepth(cards: CardNode[]): string[][] {
   const columns: string[][] = [];
   for (const card of cards) {
-    const index = card.level - 1;
+    const index = card.depth;
     (columns[index] ??= []).push(card.id);
   }
   return columns;

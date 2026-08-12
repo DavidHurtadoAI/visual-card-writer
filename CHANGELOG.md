@@ -2,6 +2,11 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.6
+
+- Keep the card editor available when Markdown skips a heading level. Affected cards now appear at their inferred logical depth with an amber hint instead of blocking the complete view.
+- Let the heading hint promote only the affected branch, insert the missing parent card, open the Markdown editor, or keep the original structure unchanged.
+
 ## 0.1.5
 
 - Reveal a card's children as soon as it is selected, at every heading level, without moving the selection to them. Opening a note now shows the first H1 selected with its children already visible, instead of a single collapsed card.
