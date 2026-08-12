@@ -27,11 +27,14 @@ export interface CardSurfaceRect {
   height: number;
 }
 
-export interface ConnectorGeometry {
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
+export interface ConnectorPoint {
+  x: number;
+  y: number;
+}
+
+export interface OrthogonalConnectorGeometry {
+  path: string;
+  arrowTips: ConnectorPoint[];
 }
 
 export function groupCardsByDepth(cards: CardNode[]): string[][] {
@@ -191,38 +194,37 @@ export function getLayoutNavigationKeys(orientation: LayoutOrientation): LayoutN
     : { previous: "ArrowLeft", next: "ArrowRight", parent: "ArrowUp", child: "ArrowDown" };
 }
 
-export function getConnectorGeometry(
+export function getOrthogonalConnectorGeometry(
   parent: CardSurfaceRect,
-  child: CardSurfaceRect,
-  orientation: LayoutOrientation
-): ConnectorGeometry {
-  return orientation === "horizontal"
-    ? {
-        startX: parent.left + parent.width,
-        startY: parent.top + parent.height / 2,
-        endX: child.left,
-        endY: child.top + child.height / 2
-      }
-    : {
-        startX: parent.left + parent.width / 2,
-        startY: parent.top + parent.height,
-        endX: child.left + child.width / 2,
-        endY: child.top
-      };
-}
-
-export function getConnectorPath(
-  geometry: ConnectorGeometry,
+  children: CardSurfaceRect[],
   orientation: LayoutOrientation,
   arrowClearance = 4
-): string {
-  const { startX, startY, endX, endY } = geometry;
-  if (orientation === "horizontal") {
-    const lineEndX = Math.max(startX, endX - arrowClearance);
-    const midpoint = (startX + lineEndX) / 2;
-    return `M ${startX} ${startY} C ${midpoint} ${startY}, ${midpoint} ${endY}, ${lineEndX} ${endY}`;
+): OrthogonalConnectorGeometry {
+  if (children.length === 0) {
+    return { path: "", arrowTips: [] };
   }
-  const lineEndY = Math.max(startY, endY - arrowClearance);
-  const midpoint = (startY + lineEndY) / 2;
-  return `M ${startX} ${startY} C ${startX} ${midpoint}, ${endX} ${midpoint}, ${endX} ${lineEndY}`;
+  if (orientation === "horizontal") {
+    const start = { x: parent.left + parent.width, y: parent.top + parent.height / 2 };
+    const arrowTips = children.map((child) => ({ x: child.left, y: child.top + child.height / 2 }));
+    const junctionX = (start.x + Math.min(...arrowTips.map((tip) => tip.x))) / 2;
+    const busMinimum = Math.min(start.y, ...arrowTips.map((tip) => tip.y));
+    const busMaximum = Math.max(start.y, ...arrowTips.map((tip) => tip.y));
+    const segments = [
+      `M ${start.x} ${start.y} H ${junctionX}`,
+      `M ${junctionX} ${busMinimum} V ${busMaximum}`,
+      ...arrowTips.map((tip) => `M ${junctionX} ${tip.y} H ${Math.max(junctionX, tip.x - arrowClearance)}`)
+    ];
+    return { path: segments.join(" "), arrowTips };
+  }
+  const start = { x: parent.left + parent.width / 2, y: parent.top + parent.height };
+  const arrowTips = children.map((child) => ({ x: child.left + child.width / 2, y: child.top }));
+  const junctionY = (start.y + Math.min(...arrowTips.map((tip) => tip.y))) / 2;
+  const busMinimum = Math.min(start.x, ...arrowTips.map((tip) => tip.x));
+  const busMaximum = Math.max(start.x, ...arrowTips.map((tip) => tip.x));
+  const segments = [
+    `M ${start.x} ${start.y} V ${junctionY}`,
+    `M ${busMinimum} ${junctionY} H ${busMaximum}`,
+    ...arrowTips.map((tip) => `M ${tip.x} ${junctionY} V ${Math.max(junctionY, tip.y - arrowClearance)}`)
+  ];
+  return { path: segments.join(" "), arrowTips };
 }

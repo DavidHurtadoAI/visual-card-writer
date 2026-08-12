@@ -4,8 +4,7 @@ import {
   computeTreeLayout,
   getBranchCardIds,
   getCardEmphasis,
-  getConnectorGeometry,
-  getConnectorPath,
+  getOrthogonalConnectorGeometry,
   getLayoutNavigationKeys,
   getOpenBranchDescendants,
   getVisibleCards,
@@ -173,21 +172,40 @@ describe("orientation-aware layout", () => {
   });
 });
 
-describe("first-child connectors", () => {
+describe("orthogonal child connectors", () => {
   const parent = { left: 10, top: 20, width: 100, height: 60 };
-  const child = { left: 128, top: 110, width: 120, height: 80 };
 
-  it("points from the right edge of a parent to the left edge of its first child in horizontal mode", () => {
-    const geometry = getConnectorGeometry(parent, child, "horizontal");
+  it("branches at right angles from a parent to every visible child in horizontal mode", () => {
+    const geometry = getOrthogonalConnectorGeometry(
+      parent,
+      [
+        { left: 128, top: 110, width: 120, height: 80 },
+        { left: 128, top: 220, width: 120, height: 60 }
+      ],
+      "horizontal"
+    );
 
-    expect(geometry).toEqual({ startX: 110, startY: 50, endX: 128, endY: 150 });
-    expect(getConnectorPath(geometry, "horizontal")).toBe("M 110 50 C 117 50, 117 150, 124 150");
+    expect(geometry.arrowTips).toEqual([
+      { x: 128, y: 150 },
+      { x: 128, y: 250 }
+    ]);
+    expect(geometry.path).toBe("M 110 50 H 119 M 119 50 V 250 M 119 150 H 124 M 119 250 H 124");
   });
 
-  it("points from the bottom edge of a parent to the top edge of its first child in vertical mode", () => {
-    const geometry = getConnectorGeometry(parent, child, "vertical");
+  it("branches at right angles from a parent to every visible child in vertical mode", () => {
+    const geometry = getOrthogonalConnectorGeometry(
+      parent,
+      [
+        { left: 128, top: 110, width: 120, height: 80 },
+        { left: 280, top: 110, width: 80, height: 60 }
+      ],
+      "vertical"
+    );
 
-    expect(geometry).toEqual({ startX: 60, startY: 80, endX: 188, endY: 110 });
-    expect(getConnectorPath(geometry, "vertical")).toBe("M 60 80 C 60 93, 188 93, 188 106");
+    expect(geometry.arrowTips).toEqual([
+      { x: 188, y: 110 },
+      { x: 320, y: 110 }
+    ]);
+    expect(geometry.path).toBe("M 60 80 V 95 M 60 95 H 320 M 188 95 V 106 M 320 95 V 106");
   });
 });
