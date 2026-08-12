@@ -103,6 +103,26 @@ describe("parseCardDocument", () => {
 
     expect(source.slice(parsed.cards[1].range.start, parsed.cards[1].range.end)).toBe("## Child\r\nMore\r\n");
   });
+
+  it("parses MARP documents with explicit marp frontmatter as slides", () => {
+    const source = "---\nmarp: true\n---\n# One\n\n---\n# Two\n";
+    const parsed = parseCardDocument(source);
+
+    expect(parsed.structure).toBe("slides");
+    expect(parsed.cards.map(({ kind, title }) => ({ kind, title }))).toEqual([
+      { kind: "slide", title: "One" },
+      { kind: "slide", title: "Two" }
+    ]);
+  });
+
+  it("keeps ordinary Markdown thematic breaks in heading mode", () => {
+    const source = "# One\nAlpha\n\n---\n\n## Two\nBeta\n";
+    const parsed = parseCardDocument(source);
+
+    expect(parsed.structure).toBe("headings");
+    expect(parsed.cards.map((card) => card.title)).toEqual(["One", "Two"]);
+    expect(parsed.cards[0].markdown).toContain("---");
+  });
 });
 
 describe("card fragment operations", () => {

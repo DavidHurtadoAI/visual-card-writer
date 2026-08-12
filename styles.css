@@ -68,6 +68,25 @@
   color: var(--text-normal);
   background: var(--background-modifier-hover);
 }
+.visual-card-writer-toolbar-button {
+  flex: 0 0 auto;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-s);
+  box-shadow: none;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+}
+
+.visual-card-writer-toolbar-button:hover,
+.visual-card-writer-toolbar-button:focus-visible {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
 
 .visual-card-writer-breadcrumb {
   display: flex;
@@ -108,6 +127,39 @@
   container-type: inline-size;
 }
 
+
+.visual-card-writer-render-busy {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--background-secondary) 88%, transparent);
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 140ms ease, visibility 140ms ease;
+}
+
+.visual-card-writer-columns.is-laid-out .visual-card-writer-render-busy {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.visual-card-writer-render-spinner {
+  width: 34px;
+  height: 34px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--background-primary) 72%, transparent);
+  border: 3px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+  border-top-color: var(--interactive-accent);
+  border-radius: 50%;
+  animation: visual-card-writer-spin 720ms linear infinite;
+}
+
+@keyframes visual-card-writer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .visual-card-writer-scene {
   position: relative;
   width: var(--vcw-scene-width, auto);
@@ -165,9 +217,20 @@
   pointer-events: none;
 }
 
-.visual-card-writer-card.visual-card-writer-transition-ghost {
+.visual-card-writer-transition-overlay {
   position: fixed;
-  z-index: var(--layer-popover, 1000);
+  z-index: 3;
+  top: var(--vcw-overlay-top);
+  left: var(--vcw-overlay-left);
+  width: var(--vcw-overlay-width);
+  height: var(--vcw-overlay-height);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.visual-card-writer-card.visual-card-writer-transition-ghost {
+  position: absolute;
+  z-index: 1;
   top: var(--vcw-ghost-top);
   left: var(--vcw-ghost-left);
   width: var(--vcw-ghost-width);
@@ -218,6 +281,7 @@
   background: var(--background-primary);
   resize: none;
   transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  cursor: grab;
 }
 
 .visual-card-writer-view.is-layout-vertical .visual-card-writer-surface {
@@ -240,6 +304,10 @@
 }
 
 .visual-card-writer-card.is-transition-destination-hidden {
+  visibility: hidden;
+}
+
+.visual-card-writer-columns:not(.is-laid-out) .visual-card-writer-surface {
   visibility: hidden;
 }
 
@@ -485,25 +553,96 @@
   opacity: 1;
 }
 
-.visual-card-writer-card.is-active-path {
-  opacity: 0.72;
+.visual-card-writer-card.is-active-path,
+.visual-card-writer-card.is-available {
+  opacity: 1;
 }
 
-.visual-card-writer-card.is-next-choice {
-  opacity: 0.86;
+.visual-card-writer-view.is-dragging-card .visual-card-writer-card {
+  transition: none;
 }
 
-.visual-card-writer-card.is-deemphasized {
-  border-color: color-mix(in srgb, var(--background-modifier-border) 55%, transparent);
-  box-shadow: none;
-  filter: saturate(0.45);
-  opacity: 0.3;
+.visual-card-writer-view.is-dragging-card .visual-card-writer-card:hover,
+.visual-card-writer-view.is-dragging-card .visual-card-writer-card:focus-visible {
+  transform: none;
 }
 
-.visual-card-writer-card.is-deemphasized:hover,
-.visual-card-writer-card.is-deemphasized:focus-visible {
-  filter: saturate(0.8);
-  opacity: 0.72;
+.visual-card-writer-view.is-dragging-card .visual-card-writer-card-body,
+.visual-card-writer-view.is-dragging-card .visual-card-writer-card button,
+.visual-card-writer-view.is-dragging-card .visual-card-writer-resize-handle {
+  pointer-events: none;
+}
+
+.visual-card-writer-card.is-dragging {
+  cursor: grabbing;
+  opacity: 0.9;
+}
+
+.visual-card-writer-card.is-drop-target {
+  border-color: color-mix(in srgb, var(--interactive-accent) 58%, var(--background-modifier-border));
+  outline: 2px solid color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+  outline-offset: 3px;
+  background: color-mix(in srgb, var(--interactive-accent) 7%, var(--background-primary));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 42%, transparent), 0 14px 32px color-mix(in srgb, var(--interactive-accent) 18%, transparent), var(--shadow-l);
+}
+
+.visual-card-writer-card.is-drop-target::after {
+  position: absolute;
+  z-index: 6;
+  inset: -7px;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: calc(var(--radius-l) + 6px);
+  background: transparent;
+  content: "";
+  opacity: 1;
+  pointer-events: none;
+}
+
+.visual-card-writer-card.is-drop-target[data-drop-placement="before"]::after {
+  border-top: 9px solid var(--interactive-accent);
+  box-shadow: 0 -5px 14px color-mix(in srgb, var(--interactive-accent) 38%, transparent);
+}
+
+.visual-card-writer-card.is-drop-target[data-drop-placement="after"]::after {
+  border-bottom: 9px solid var(--interactive-accent);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--interactive-accent) 38%, transparent);
+}
+
+.visual-card-writer-card.is-drop-target[data-drop-placement="child"]::after {
+  border-right: 9px solid var(--interactive-accent);
+  box-shadow: 5px 0 14px color-mix(in srgb, var(--interactive-accent) 38%, transparent);
+}
+
+.visual-card-writer-view.is-layout-vertical .visual-card-writer-card.is-drop-target[data-drop-placement="before"]::after {
+  border-top: 0;
+  border-left: 9px solid var(--interactive-accent);
+  box-shadow: -5px 0 14px color-mix(in srgb, var(--interactive-accent) 38%, transparent);
+}
+
+.visual-card-writer-view.is-layout-vertical .visual-card-writer-card.is-drop-target[data-drop-placement="after"]::after {
+  border-right: 9px solid var(--interactive-accent);
+  border-bottom: 0;
+  box-shadow: 5px 0 14px color-mix(in srgb, var(--interactive-accent) 38%, transparent);
+}
+
+.visual-card-writer-view.is-layout-vertical .visual-card-writer-card.is-drop-target[data-drop-placement="child"]::after {
+  border-right: 0;
+  border-bottom: 9px solid var(--interactive-accent);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--interactive-accent) 38%, transparent);
+}
+
+.visual-card-writer-drag-image {
+  position: fixed;
+  z-index: -1;
+  top: -10000px;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0.01;
+  pointer-events: none;
 }
 
 .visual-card-writer-card-body {
