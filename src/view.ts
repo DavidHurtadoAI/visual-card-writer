@@ -39,6 +39,8 @@ import { getHierarchyGuidance } from "./hierarchy-guidance";
 import {
   computeBranchAxisLayout,
   getCardEmphasis,
+  getConnectorGeometry,
+  getConnectorPath,
   getBranchCardIds,
   getLayoutNavigationKeys,
   getOpenBranchDescendants,
@@ -1759,6 +1761,7 @@ export class VisualCardWriterView extends TextFileView {
       }
       surface.style.setProperty("--vcw-surface-width", `${Math.ceil(surfaceWidth)}px`);
       surface.style.setProperty("--vcw-surface-height", `${Math.ceil(surfaceHeight)}px`);
+      this.renderFirstChildConnectors(surface, visibleCards, surfaceWidth, surfaceHeight);
       scene.dataset.worldWidth = String(sceneWidth);
       scene.dataset.worldHeight = String(sceneHeight);
       this.applyZoomGeometry(columnsElement);
@@ -1797,6 +1800,75 @@ export class VisualCardWriterView extends TextFileView {
       event.stopPropagation();
       void this.setLayoutOrientation(orientation);
     });
+  }
+
+  private renderFirstChildConnectors(
+    surface: HTMLElement,
+    visibleCards: CardNode[],
+    surfaceWidth: number,
+    surfaceHeight: number
+  ): void {
+    surface.querySelector(".visual-card-writer-connectors")?.remove();
+    const byId = new Map(visibleCards.map((card) => [card.id, card]));
+    const pairs = visibleCards
+      .map((parent) => ({ parent, child: byId.get(parent.children[0] ?? "") }))
+      .filter((pair): pair is { parent: CardNode; child: CardNode } => pair.child != null);
+    if (pairs.length === 0) {
+      return;
+    }
+
+    const namespace = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(namespace, "svg");
+    svg.classList.add("visual-card-writer-connectors");
+    svg.setAttribute("width", String(Math.ceil(surfaceWidth)));
+    svg.setAttribute("height", String(Math.ceil(surfaceHeight)));
+    svg.setAttribute("viewBox", `0 0 ${Math.ceil(surfaceWidth)} ${Math.ceil(surfaceHeight)}`);
+    svg.setAttribute("aria-hidden", "true");
+
+    for (const { parent, child } of pairs) {
+      const parentElement = this.cardElement(parent.id);
+      const childElement = this.cardElement(child.id);
+      const parentGroup = parentElement?.parentElement;
+      const childGroup = childElement?.parentElement;
+      if (!parentElement || !childElement || !parentGroup || !childGroup) {
+        continue;
+      }
+      const geometry = getConnectorGeometry(
+        {
+          left: parentGroup.offsetLeft + parentElement.offsetLeft,
+          top: parentGroup.offsetTop + parentElement.offsetTop,
+          width: parentElement.offsetWidth,
+          height: parentElement.offsetHeight
+        },
+        {
+          left: childGroup.offsetLeft + childElement.offsetLeft,
+          top: childGroup.offsetTop + childElement.offsetTop,
+          width: childElement.offsetWidth,
+          height: childElement.offsetHeight
+        },
+        this.layoutOrientation
+      );
+      const connector = document.createElementNS(namespace, "g");
+      connector.classList.add("visual-card-writer-connector");
+      connector.dataset.emphasis = parentElement.dataset.emphasis ?? "deemphasized";
+
+      const line = document.createElementNS(namespace, "path");
+      line.classList.add("visual-card-writer-connector-line");
+      line.setAttribute("d", getConnectorPath(geometry, this.layoutOrientation));
+      connector.appendChild(line);
+
+      const arrow = document.createElementNS(namespace, "path");
+      arrow.classList.add("visual-card-writer-connector-arrow");
+      arrow.setAttribute(
+        "d",
+        this.layoutOrientation === "horizontal"
+          ? `M ${geometry.endX} ${geometry.endY} L ${geometry.endX - 6} ${geometry.endY - 4} L ${geometry.endX - 6} ${geometry.endY + 4} Z`
+          : `M ${geometry.endX} ${geometry.endY} L ${geometry.endX - 4} ${geometry.endY - 6} L ${geometry.endX + 4} ${geometry.endY - 6} Z`
+      );
+      connector.appendChild(arrow);
+      svg.appendChild(connector);
+    }
+    surface.prepend(svg);
   }
 
   private applyLayoutOrientationClass(): void {

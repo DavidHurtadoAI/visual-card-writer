@@ -20,6 +20,20 @@ export interface LayoutNavigationKeys {
   child: "ArrowRight" | "ArrowDown";
 }
 
+export interface CardSurfaceRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface ConnectorGeometry {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+}
+
 export function groupCardsByDepth(cards: CardNode[]): string[][] {
   const columns: string[][] = [];
   for (const card of cards) {
@@ -175,4 +189,40 @@ export function getLayoutNavigationKeys(orientation: LayoutOrientation): LayoutN
   return orientation === "horizontal"
     ? { previous: "ArrowUp", next: "ArrowDown", parent: "ArrowLeft", child: "ArrowRight" }
     : { previous: "ArrowLeft", next: "ArrowRight", parent: "ArrowUp", child: "ArrowDown" };
+}
+
+export function getConnectorGeometry(
+  parent: CardSurfaceRect,
+  child: CardSurfaceRect,
+  orientation: LayoutOrientation
+): ConnectorGeometry {
+  return orientation === "horizontal"
+    ? {
+        startX: parent.left + parent.width,
+        startY: parent.top + parent.height / 2,
+        endX: child.left,
+        endY: child.top + child.height / 2
+      }
+    : {
+        startX: parent.left + parent.width / 2,
+        startY: parent.top + parent.height,
+        endX: child.left + child.width / 2,
+        endY: child.top
+      };
+}
+
+export function getConnectorPath(
+  geometry: ConnectorGeometry,
+  orientation: LayoutOrientation,
+  arrowClearance = 4
+): string {
+  const { startX, startY, endX, endY } = geometry;
+  if (orientation === "horizontal") {
+    const lineEndX = Math.max(startX, endX - arrowClearance);
+    const midpoint = (startX + lineEndX) / 2;
+    return `M ${startX} ${startY} C ${midpoint} ${startY}, ${midpoint} ${endY}, ${lineEndX} ${endY}`;
+  }
+  const lineEndY = Math.max(startY, endY - arrowClearance);
+  const midpoint = (startY + lineEndY) / 2;
+  return `M ${startX} ${startY} C ${startX} ${midpoint}, ${endX} ${midpoint}, ${endX} ${lineEndY}`;
 }

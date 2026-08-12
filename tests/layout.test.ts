@@ -4,6 +4,8 @@ import {
   computeTreeLayout,
   getBranchCardIds,
   getCardEmphasis,
+  getConnectorGeometry,
+  getConnectorPath,
   getLayoutNavigationKeys,
   getOpenBranchDescendants,
   getVisibleCards,
@@ -168,5 +170,24 @@ describe("orientation-aware layout", () => {
       parent: "ArrowUp",
       child: "ArrowDown"
     });
+  });
+});
+
+describe("first-child connectors", () => {
+  const parent = { left: 10, top: 20, width: 100, height: 60 };
+  const child = { left: 128, top: 110, width: 120, height: 80 };
+
+  it("points from the right edge of a parent to the left edge of its first child in horizontal mode", () => {
+    const geometry = getConnectorGeometry(parent, child, "horizontal");
+
+    expect(geometry).toEqual({ startX: 110, startY: 50, endX: 128, endY: 150 });
+    expect(getConnectorPath(geometry, "horizontal")).toBe("M 110 50 C 117 50, 117 150, 124 150");
+  });
+
+  it("points from the bottom edge of a parent to the top edge of its first child in vertical mode", () => {
+    const geometry = getConnectorGeometry(parent, child, "vertical");
+
+    expect(geometry).toEqual({ startX: 60, startY: 80, endX: 188, endY: 110 });
+    expect(getConnectorPath(geometry, "vertical")).toBe("M 60 80 C 60 93, 188 93, 188 106");
   });
 });

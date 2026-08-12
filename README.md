@@ -15,6 +15,7 @@ _GIF showing the UI in action_
 
 - Navigate a Markdown outline as aligned cards in a horizontal or vertical tree.
 - Switch between **Horizontal** and **Vertical** from the editor toolbar; the preference persists across plugin reloads.
+- Follow subtle directional arrows from each card to its first visible child without adding extra space between cards.
 - Keep every branch visible with contextual dimming, or collapse complete subtrees.
 - Create child and sibling cards without leaving the visual editor.
 - Edit cards with an embedded CodeMirror 6 editor and essential Live Preview.
@@ -53,7 +54,7 @@ Skipped heading levels do not block the card editor. If an H3 follows an H1, for
 
 ### Horizontal and vertical layouts
 
-Horizontal layout remains the default and grows the hierarchy from left to right. Vertical layout transposes the same tree so hierarchy levels grow downward and sibling branches spread from left to right, which works better in portrait windows. Both orientations use the same Markdown, cards, folding state, zoom, editing, and resize controls.
+Horizontal layout remains the default and grows the hierarchy from left to right. Vertical layout transposes the same tree so hierarchy levels grow downward and sibling branches spread from left to right, which works better in portrait windows. Subtle arrows connect each card to its first visible child and rotate with the layout, making the reading direction explicit without increasing the gaps. Both orientations use the same Markdown, cards, folding state, zoom, editing, and resize controls.
 
 <img src="./vertical-card-layout.png" width="900" alt="Visual Card Writer showing a Markdown hierarchy growing downward in vertical layout">
 

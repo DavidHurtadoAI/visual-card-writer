@@ -141,6 +141,38 @@
   gap: var(--visual-card-writer-column-gap);
   transform: scale(var(--vcw-zoom, 1));
   transform-origin: top left;
+  isolation: isolate;
+}
+
+.visual-card-writer-connectors {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.visual-card-writer-connector {
+  color: var(--text-faint);
+  opacity: 0.62;
+}
+
+.visual-card-writer-connector[data-emphasis="selected"],
+.visual-card-writer-connector[data-emphasis="active-path"] {
+  color: var(--text-muted);
+  opacity: 0.82;
+}
+
+.visual-card-writer-connector-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.visual-card-writer-connector-arrow {
+  fill: currentColor;
 }
 
 .visual-card-writer-view.is-layout-transitioning .visual-card-writer-columns {
@@ -169,6 +201,7 @@
 
 .visual-card-writer-column {
   position: relative;
+  z-index: 1;
   display: block;
   flex: 0 0 auto;
   width: var(--vcw-column-width, var(--vcw-layout-column-width, max-content));
