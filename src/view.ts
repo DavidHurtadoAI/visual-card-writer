@@ -1324,7 +1324,7 @@ export class VisualCardWriterView extends TextFileView {
       "is-dragging-descendant",
       "is-drop-target"
     );
-    preview.addClass("visual-card-writer-drag-preview");
+    preview.addClass("visual-card-writer-drag-preview", "is-positioning");
     preview.querySelectorAll("button, .visual-card-writer-resize-handle").forEach((element) => element.remove());
     preview.querySelectorAll<HTMLElement>("a, [tabindex]").forEach((element) => element.setAttribute("tabindex", "-1"));
     const branchLabel = this.parsed.structure === "slides"
@@ -1335,11 +1335,10 @@ export class VisualCardWriterView extends TextFileView {
     preview.createDiv({ cls: "visual-card-writer-drag-preview-label", text: branchLabel });
     const sourceRect = cardElement.getBoundingClientRect();
     preview.style.setProperty("--vcw-drag-preview-width", `${Math.min(Math.max(sourceRect.width, 220), 420)}px`);
-    preview.style.setProperty("visibility", "hidden");
     document.body.appendChild(preview);
     this.dragPreviewElement = preview;
     this.updateDragPreviewPosition(clientX, clientY);
-    preview.style.removeProperty("visibility");
+    preview.removeClass("is-positioning");
   }
 
   private updateDragPreviewPosition(clientX: number, clientY: number): void {
