@@ -13,15 +13,15 @@ _GIF showing the UI in action_
 
 ## Features
 
-- Navigate a Markdown outline as aligned cards in a horizontal or vertical tree.
-- Switch between **Horizontal** and **Vertical** with one toolbar toggle that shows the current mode with both text and icon. Each card editor opens in Horizontal mode.
-- Follow subtle orthogonal arrows from each card to all its visible direct children without adding extra space between cards.
-- Keep every branch visible with contextual dimming, or collapse complete subtrees.
+- Navigate a Markdown outline as aligned cards in a horizontal or vertical tree, with subtle orthogonal connectors between parents and their visible children.
+- Drag cards to reorder them, move complete branches, or change their depth. Visual Card Writer updates the underlying heading levels automatically.
+- Treat an explicit MARP document (`marp: true`) as a flat sequence of draggable slide cards while leaving ordinary Markdown thematic breaks untouched.
+- Keep the selected branch in focus by dimming unrelated cards. A global toolbar toggle turns this behavior on or off and remembers the choice across views and reloads.
+- Expand or collapse individual branches, or reveal and fold the complete document from the toolbar.
 - Create child and sibling cards without leaving the visual editor.
 - Edit cards with an embedded CodeMirror 6 editor and essential Live Preview.
 - Resize complete columns horizontally and individual cards vertically.
-- Pan with the middle mouse button and zoom with `Ctrl`/`Cmd` + mouse wheel.
-- Animate selection, expansion, collapse, and layout changes to preserve visual context.
+- Pan, scroll in both directions, and zoom without losing the current visual context, including while dragging a card.
 - Preserve standard Markdown without proprietary comments or metadata.
 
 ## Document format
@@ -52,6 +52,28 @@ Skipped heading levels do not block the card editor. If an H3 follows an H1, for
 
 <img src="./skipped-heading-repair.png" width="900" alt="Visual Card Writer showing an H1-to-H3 heading jump and the local repair menu">
 
+### MARP slide decks
+
+When the YAML frontmatter explicitly sets `marp: true`, Visual Card Writer interprets each `---` slide separator as a card boundary:
+
+```markdown
+---
+marp: true
+---
+
+# Opening
+
+First slide content.
+
+---
+
+# Next idea
+
+Second slide content.
+```
+
+Slides remain a flat sequence: drag them before or after one another to reorder the deck. They cannot be nested. Without `marp: true`, a thematic break stays inside the surrounding Markdown section and does not create a new card.
+
 ### Horizontal and vertical layouts
 
 Horizontal layout remains the default and grows the hierarchy from left to right. Vertical layout transposes the same tree so hierarchy levels grow downward and sibling branches spread from left to right, which works better in portrait windows. Subtle right-angle connectors branch from each card to every visible direct child and rotate with the layout, making both reading direction and sibling relationships explicit without increasing the gaps. Both orientations use the same Markdown, cards, folding state, zoom, editing, and resize controls.
@@ -78,13 +100,29 @@ Open a Markdown note and run **Visual Card Writer: Open current note in card edi
 - Select a card to navigate its branch.
 - Click the pencil or double-click a card to edit it.
 - Click outside the card to save and leave editing.
-- Use the `+` button to create a child card.
-- Use a card's chevron to expand or collapse its children.
-- Use the orientation toggle in the toolbar to change the direction of the tree. Its text and icon show the current mode; a newly opened card editor always starts in **Horizontal**.
+- Use the `+` button to create a child card where the document structure allows it.
 - Drag the right edge to resize every card at that hierarchy level.
 - Drag the bottom edge to resize one card vertically.
+
+### Reorder cards and branches
+
+Drag a card over another card and follow the highlighted drop indicator:
+
+- Drop **before** or **after** to reorder cards at that position.
+- Drop on the **child** target to place the card under a new parent.
+- Moving a heading card carries its complete descendant branch and rewrites the affected ATX heading levels so the Markdown remains consistent.
+- MARP slides support before/after reordering only; slides always remain flat.
+- Use the mouse wheel while dragging to reach off-screen targets. Hold `Shift` while using the wheel to move sideways.
+
+### Toolbar and navigation
+
+- Use a card's chevron to expand or collapse its children.
+- Use **Expand all** and **Collapse all** to reveal or fold the complete hierarchy.
+- Use the orientation toggle to switch between **Horizontal** and **Vertical**. Its text and icon show the current mode; a newly opened card editor starts in Horizontal.
+- Branch focus is enabled by default and dims cards outside the selected route. Use the focus/eye toggle to show every card equally; the setting applies to every open card view and persists after reloading Obsidian.
 - Middle-drag the background to pan.
-- Hold `Ctrl`/`Cmd` and use the mouse wheel to zoom.
+- Use the mouse wheel to scroll, or `Shift` + mouse wheel to scroll sideways.
+- Hold `Ctrl`/`Cmd` and use the mouse wheel to zoom. Click the zoom percentage to reset it to 100%.
 
 ### Commands
 
@@ -93,6 +131,7 @@ Open a Markdown note and run **Visual Card Writer: Open current note in card edi
 - **Visual Card Writer: Add child card**
 - **Visual Card Writer: Add sibling card below**
 - **Visual Card Writer: Toggle horizontal or vertical card layout**
+- **Visual Card Writer: Toggle dimming of cards outside the selected branch**
 
 ## Current limitations
 
