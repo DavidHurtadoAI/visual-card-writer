@@ -2,6 +2,13 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.8
+
+- Add smooth drag-and-drop card reordering, including moving branches across heading levels and orientation-aware drop targets.
+- Add MARP slide mode when frontmatter explicitly sets `marp: true`; ordinary thematic breaks remain ordinary Markdown.
+- Add expand/collapse-all controls, smoother rendering, preserved scroll state, and mouse-wheel navigation during drag.
+- Restore branch-focus dimming with a global toolbar toggle that updates every open card view and persists across reloads.
+
 ## 0.1.7
 
 - Add a single **Horizontal / Vertical** orientation toggle that shows the current mode with both text and icon. Every newly opened card editor starts in Horizontal; vertical makes hierarchy levels grow downward and arranges sibling branches from left to right.
