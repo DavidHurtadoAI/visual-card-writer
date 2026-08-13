@@ -39,6 +39,7 @@ import { getHierarchyGuidance } from "./hierarchy-guidance";
 import {
   computeBranchAxisLayout,
   getCardEmphasis,
+  getDragPreviewPosition,
   getDropPlacementForPoint,
   getOrthogonalConnectorGeometry,
   getBranchCardIds,
@@ -135,6 +136,8 @@ export class VisualCardWriterView extends TextFileView {
   private pendingDragWheelDeltaY = 0;
   private dragWheelViewport: HTMLElement | null = null;
   private dragWheelListener: ((event: WheelEvent) => void) | null = null;
+  private dragPreviewElement: HTMLElement | null = null;
+  private dragOriginElements: HTMLElement[] = [];
   private suppressNextCardClick = false;
   private focusDimmingEnabled = true;
   private focusDimmingButton: HTMLButtonElement | null = null;
@@ -197,6 +200,7 @@ export class VisualCardWriterView extends TextFileView {
   clear(): void {
     this.cancelCardTransition();
     this.cancelViewportScrollAnimation();
+    this.clearCardDragState();
     this.renderGeneration += 1;
     this.destroyEditor();
     this.renderComponent?.unload();
@@ -509,6 +513,7 @@ export class VisualCardWriterView extends TextFileView {
       return;
     }
     this.cancelViewportScrollAnimation();
+    this.clearCardDragState();
     const previousViewport = this.contentEl.querySelector<HTMLElement>(".visual-card-writer-columns");
     const previousScrollLeft = previousViewport?.scrollLeft ?? 0;
     const previousScrollTop = previousViewport?.scrollTop ?? 0;
@@ -793,6 +798,9 @@ export class VisualCardWriterView extends TextFileView {
 
   private async selectCard(cardId: string): Promise<void> {
     this.cancelViewportScrollAnimation();
+    if (!this.collapsedCardIds.has(cardId)) {
+      this.cancelCardTransition();
+    }
     if (this.editor && this.editingCardId !== cardId) {
       await this.finishEditing(true);
     }
@@ -1213,7 +1221,7 @@ export class VisualCardWriterView extends TextFileView {
       if (viewport) {
         this.startDragWheelListener(viewport);
       }
-      cardElement.addClass("is-dragging");
+      this.startDragVisualFeedback(cardElement, card, event.clientX, event.clientY);
       this.updateDropTargetFromDragPoint();
     };
 
@@ -1226,7 +1234,7 @@ export class VisualCardWriterView extends TextFileView {
       const didDrag = hasStartedDrag;
       pointerId = null;
       hasStartedDrag = false;
-      cardElement.removeClass("is-dragging");
+      this.clearDragVisualFeedback();
       this.containerEl.removeClass("is-dragging-card");
       this.clearDragWheelState();
       if (cardElement.hasPointerCapture(event.pointerId)) {
@@ -1277,6 +1285,7 @@ export class VisualCardWriterView extends TextFileView {
       }
       event.preventDefault();
       this.rememberDragPointer(event);
+      this.updateDragPreviewPosition(event.clientX, event.clientY);
       this.updateDropTargetFromDragPoint();
     });
     cardElement.addEventListener("pointerup", (event) => finishPointerDrag(event, true));
@@ -1287,6 +1296,84 @@ export class VisualCardWriterView extends TextFileView {
       }
     });
   }
+
+  private startDragVisualFeedback(cardElement: HTMLElement, card: CardNode, clientX: number, clientY: number): void {
+    this.clearDragVisualFeedback();
+    const branch = this.parsed.structure === "headings" ? this.subtreeForCard(card.id) : [card];
+    for (const branchCard of branch) {
+      const element = this.cardElement(branchCard.id);
+      if (!element) {
+        continue;
+      }
+      element.addClass(branchCard.id === card.id ? "is-dragging" : "is-dragging-descendant");
+      this.dragOriginElements.push(element);
+    }
+
+    const preview = cardElement.cloneNode(true) as HTMLElement;
+    preview.removeAttribute("style");
+    preview.removeAttribute("title");
+    preview.removeAttribute("data-card-id");
+    preview.removeAttribute("tabindex");
+    preview.setAttribute("aria-hidden", "true");
+    preview.removeClass(
+      "is-selected",
+      "is-active-path",
+      "is-next-choice",
+      "is-deemphasized",
+      "is-dragging",
+      "is-dragging-descendant",
+      "is-drop-target"
+    );
+    preview.addClass("visual-card-writer-drag-preview");
+    preview.querySelectorAll("button, .visual-card-writer-resize-handle").forEach((element) => element.remove());
+    preview.querySelectorAll<HTMLElement>("a, [tabindex]").forEach((element) => element.setAttribute("tabindex", "-1"));
+    const branchLabel = this.parsed.structure === "slides"
+      ? "Moving slide"
+      : branch.length > 1
+        ? `Moving branch · ${branch.length} cards`
+        : "Moving card";
+    preview.createDiv({ cls: "visual-card-writer-drag-preview-label", text: branchLabel });
+    const sourceRect = cardElement.getBoundingClientRect();
+    preview.style.setProperty("--vcw-drag-preview-width", `${Math.min(Math.max(sourceRect.width, 220), 420)}px`);
+    preview.style.setProperty("visibility", "hidden");
+    document.body.appendChild(preview);
+    this.dragPreviewElement = preview;
+    this.updateDragPreviewPosition(clientX, clientY);
+    preview.style.removeProperty("visibility");
+  }
+
+  private updateDragPreviewPosition(clientX: number, clientY: number): void {
+    const preview = this.dragPreviewElement;
+    if (!preview) {
+      return;
+    }
+    const rect = preview.getBoundingClientRect();
+    const position = getDragPreviewPosition(
+      { x: clientX, y: clientY },
+      { width: rect.width, height: rect.height },
+      { width: window.innerWidth, height: window.innerHeight }
+    );
+    preview.style.setProperty("--vcw-drag-preview-x", `${position.x}px`);
+    preview.style.setProperty("--vcw-drag-preview-y", `${position.y}px`);
+  }
+
+  private clearDragVisualFeedback(): void {
+    for (const element of this.dragOriginElements) {
+      element.removeClass("is-dragging", "is-dragging-descendant");
+    }
+    this.dragOriginElements = [];
+    this.dragPreviewElement?.remove();
+    this.dragPreviewElement = null;
+  }
+
+  private clearCardDragState(): void {
+    this.clearDragVisualFeedback();
+    this.containerEl.removeClass("is-dragging-card");
+    this.clearDragWheelState();
+    this.draggingCardId = null;
+    this.clearDropTarget();
+  }
+
   private dropPlacementForEvent(event: DragEvent, target: CardNode): CardMovePlacement {
     return this.dropPlacementForPoint(event.clientX, event.clientY, target);
   }
@@ -1367,6 +1454,7 @@ export class VisualCardWriterView extends TextFileView {
         }
         this.lastDragClientX = clientX;
         this.lastDragClientY = clientY;
+        this.updateDragPreviewPosition(clientX, clientY);
       }
       event.preventDefault();
       event.stopPropagation();
@@ -1541,9 +1629,7 @@ export class VisualCardWriterView extends TextFileView {
       const message = error instanceof Error ? error.message : String(error);
       new Notice(`Could not move the card: ${message}`);
     } finally {
-      this.draggingCardId = null;
-      this.containerEl.removeClass("is-dragging-card");
-      this.clearDropTarget();
+      this.clearCardDragState();
     }
   }
 
@@ -2331,6 +2417,11 @@ export class VisualCardWriterView extends TextFileView {
     if (token !== this.cardTransitionToken) {
       return;
     }
+    const animations = this.cardTransitionAnimations;
+    this.cardTransitionAnimations = [];
+    for (const animation of animations) {
+      animation.cancel();
+    }
     for (const element of this.cardTransitionHiddenElements) {
       element.removeClass("is-transition-destination-hidden");
     }
@@ -2341,7 +2432,6 @@ export class VisualCardWriterView extends TextFileView {
       window.clearTimeout(this.cardTransitionCleanupTimer);
       this.cardTransitionCleanupTimer = null;
     }
-    this.cardTransitionAnimations = [];
     this.cardTransitionGhosts = [];
     this.cardTransitionHiddenElements = [];
     this.containerEl.removeClass("is-layout-transitioning");

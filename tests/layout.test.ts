@@ -4,6 +4,7 @@ import {
   computeTreeLayout,
   getBranchCardIds,
   getCardEmphasis,
+  getDragPreviewPosition,
   getDropPlacementForPoint,
   getOrthogonalConnectorGeometry,
   getLayoutNavigationKeys,
@@ -192,6 +193,23 @@ describe("getDropPlacementForPoint", () => {
     expect(getDropPlacementForPoint(card, { x: 230, y: 250 }, "horizontal", false)).toBe("after");
     expect(getDropPlacementForPoint(card, { x: 150, y: 250 }, "vertical", false)).toBe("before");
     expect(getDropPlacementForPoint(card, { x: 260, y: 250 }, "vertical", false)).toBe("after");
+  });
+});
+
+describe("getDragPreviewPosition", () => {
+  const preview = { width: 300, height: 180 };
+  const viewport = { width: 1200, height: 800 };
+
+  it("places the preview below and to the right when there is room", () => {
+    expect(getDragPreviewPosition({ x: 400, y: 250 }, preview, viewport)).toEqual({ x: 418, y: 268 });
+  });
+
+  it("flips the preview away from the right and bottom viewport edges", () => {
+    expect(getDragPreviewPosition({ x: 1150, y: 760 }, preview, viewport)).toEqual({ x: 832, y: 562 });
+  });
+
+  it("keeps an oversized preview inside the viewport margin", () => {
+    expect(getDragPreviewPosition({ x: 20, y: 20 }, { width: 1400, height: 900 }, viewport)).toEqual({ x: 12, y: 12 });
   });
 });
 

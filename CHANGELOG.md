@@ -2,6 +2,12 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.9
+
+- Add clearer drag-and-drop feedback: the source branch stays visibly dimmed while a compact floating preview follows the pointer and identifies whether a card, branch, or slide is moving.
+- Keep the preview inside the viewport and prevent it from animating in from off-screen when dragging starts.
+- Fix newly revealed cards retaining a stale dimmed opacity after selection, including cards in the final branch.
+
 ## 0.1.8
 
 - Add smooth drag-and-drop card reordering, including moving branches across heading levels and orientation-aware drop targets.

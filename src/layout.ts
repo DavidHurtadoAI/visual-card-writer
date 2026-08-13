@@ -220,6 +220,25 @@ export function getDropPlacementForPoint(
   return relativeY > card.height * 0.58 ? "child" : "after";
 }
 
+export function getDragPreviewPosition(
+  pointer: ConnectorPoint,
+  preview: CardDimensions,
+  viewport: CardDimensions,
+  offset = 18,
+  margin = 12
+): ConnectorPoint {
+  const preferredLeft = pointer.x + offset;
+  const preferredTop = pointer.y + offset;
+  const alternateLeft = pointer.x - preview.width - offset;
+  const alternateTop = pointer.y - preview.height - offset;
+  const maxLeft = Math.max(margin, viewport.width - preview.width - margin);
+  const maxTop = Math.max(margin, viewport.height - preview.height - margin);
+  return {
+    x: Math.min(Math.max(preferredLeft + preview.width <= viewport.width - margin ? preferredLeft : alternateLeft, margin), maxLeft),
+    y: Math.min(Math.max(preferredTop + preview.height <= viewport.height - margin ? preferredTop : alternateTop, margin), maxTop)
+  };
+}
+
 export function getLayoutNavigationKeys(orientation: LayoutOrientation): LayoutNavigationKeys {
   return orientation === "horizontal"
     ? { previous: "ArrowUp", next: "ArrowDown", parent: "ArrowLeft", child: "ArrowRight" }
