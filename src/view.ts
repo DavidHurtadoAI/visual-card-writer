@@ -798,6 +798,9 @@ export class VisualCardWriterView extends TextFileView {
 
   private async selectCard(cardId: string): Promise<void> {
     this.cancelViewportScrollAnimation();
+    if (!this.collapsedCardIds.has(cardId)) {
+      this.cancelCardTransition();
+    }
     if (this.editor && this.editingCardId !== cardId) {
       await this.finishEditing(true);
     }
@@ -1332,9 +1335,11 @@ export class VisualCardWriterView extends TextFileView {
     preview.createDiv({ cls: "visual-card-writer-drag-preview-label", text: branchLabel });
     const sourceRect = cardElement.getBoundingClientRect();
     preview.style.setProperty("--vcw-drag-preview-width", `${Math.min(Math.max(sourceRect.width, 220), 420)}px`);
+    preview.style.setProperty("visibility", "hidden");
     document.body.appendChild(preview);
     this.dragPreviewElement = preview;
     this.updateDragPreviewPosition(clientX, clientY);
+    preview.style.removeProperty("visibility");
   }
 
   private updateDragPreviewPosition(clientX: number, clientY: number): void {
@@ -2412,6 +2417,11 @@ export class VisualCardWriterView extends TextFileView {
     if (token !== this.cardTransitionToken) {
       return;
     }
+    const animations = this.cardTransitionAnimations;
+    this.cardTransitionAnimations = [];
+    for (const animation of animations) {
+      animation.cancel();
+    }
     for (const element of this.cardTransitionHiddenElements) {
       element.removeClass("is-transition-destination-hidden");
     }
@@ -2422,7 +2432,6 @@ export class VisualCardWriterView extends TextFileView {
       window.clearTimeout(this.cardTransitionCleanupTimer);
       this.cardTransitionCleanupTimer = null;
     }
-    this.cardTransitionAnimations = [];
     this.cardTransitionGhosts = [];
     this.cardTransitionHiddenElements = [];
     this.containerEl.removeClass("is-layout-transitioning");

@@ -630,6 +630,7 @@
   pointer-events: none;
   transform: translate3d(var(--vcw-drag-preview-x, -10000px), var(--vcw-drag-preview-y, -10000px), 0) rotate(1deg);
   transform-origin: top left;
+  transition: none;
   will-change: transform;
 }
 
