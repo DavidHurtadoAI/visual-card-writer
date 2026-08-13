@@ -4,6 +4,7 @@ import {
   computeTreeLayout,
   getBranchCardIds,
   getCardEmphasis,
+  getDropPlacementForPoint,
   getOrthogonalConnectorGeometry,
   getLayoutNavigationKeys,
   getOpenBranchDescendants,
@@ -88,13 +89,10 @@ describe("getCardEmphasis", () => {
     expect(getCardEmphasis(document.cards[0], "card-1", activePath)).toBe("active-path");
   });
 
-  it("shows direct children as the next choices", () => {
-    expect(getCardEmphasis(document.cards[2], "card-1", activePath)).toBe("next-choice");
-  });
-
-  it("deemphasizes siblings and unrelated branches", () => {
-    expect(getCardEmphasis(document.cards[3], "card-1", activePath)).toBe("deemphasized");
-    expect(getCardEmphasis(document.cards[5], "card-1", activePath)).toBe("deemphasized");
+  it("keeps visible cards available instead of dimming inactive branches", () => {
+    expect(getCardEmphasis(document.cards[2], "card-1", activePath)).toBe("available");
+    expect(getCardEmphasis(document.cards[3], "card-1", activePath)).toBe("available");
+    expect(getCardEmphasis(document.cards[5], "card-1", activePath)).toBe("available");
   });
 });
 
@@ -169,6 +167,28 @@ describe("orientation-aware layout", () => {
       parent: "ArrowUp",
       child: "ArrowDown"
     });
+  });
+});
+
+describe("getDropPlacementForPoint", () => {
+  const card = { left: 100, top: 200, width: 200, height: 100 };
+
+  it("uses the vertical pointer axis for sibling drops in horizontal layout", () => {
+    expect(getDropPlacementForPoint(card, { x: 150, y: 210 }, "horizontal", true)).toBe("before");
+    expect(getDropPlacementForPoint(card, { x: 150, y: 290 }, "horizontal", true)).toBe("after");
+    expect(getDropPlacementForPoint(card, { x: 230, y: 250 }, "horizontal", true)).toBe("child");
+  });
+
+  it("uses the horizontal pointer axis for sibling drops in vertical layout", () => {
+    expect(getDropPlacementForPoint(card, { x: 110, y: 240 }, "vertical", true)).toBe("before");
+    expect(getDropPlacementForPoint(card, { x: 290, y: 240 }, "vertical", true)).toBe("after");
+    expect(getDropPlacementForPoint(card, { x: 200, y: 270 }, "vertical", true)).toBe("child");
+  });
+
+  it("disables child placement for flat slide decks while keeping the sibling axis orientation-aware", () => {
+    expect(getDropPlacementForPoint(card, { x: 230, y: 250 }, "horizontal", false)).toBe("after");
+    expect(getDropPlacementForPoint(card, { x: 150, y: 250 }, "vertical", false)).toBe("before");
+    expect(getDropPlacementForPoint(card, { x: 260, y: 250 }, "vertical", false)).toBe("after");
   });
 });
 

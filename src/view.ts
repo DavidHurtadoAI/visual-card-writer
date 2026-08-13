@@ -39,6 +39,7 @@ import { getHierarchyGuidance } from "./hierarchy-guidance";
 import {
   computeBranchAxisLayout,
   getCardEmphasis,
+  getDropPlacementForPoint,
   getOrthogonalConnectorGeometry,
   getBranchCardIds,
   getLayoutNavigationKeys,
@@ -54,8 +55,8 @@ import {
   scrollAnimationDuration,
   zoomFromWheel
 } from "./navigation";
-import { insertCard, insertMissingParent, promoteCardBranch } from "./operations";
-import type { CardInsertionKind, CardInsertionResult, HeadingRepairResult } from "./operations";
+import { insertCard, insertMissingParent, moveCard, promoteCardBranch } from "./operations";
+import type { CardInsertionKind, CardInsertionResult, CardMovePlacement, HeadingRepairResult } from "./operations";
 import { essentialLivePreview } from "./live-preview";
 import { DocumentSession, DocumentSessionRegistry } from "./session";
 import type { SessionSnapshot } from "./session";
@@ -82,7 +83,7 @@ interface CardTransitionSnapshot {
 type LevelJumpIssue = Extract<ParseIssue, { kind: "level-jump" }>;
 
 export class VisualCardWriterView extends TextFileView {
-  private parsed: CardDocument = { cards: [], roots: [], issues: [], prologue: "" };
+  private parsed: CardDocument = { structure: "headings", cards: [], roots: [], issues: [], prologue: "" };
   private selectedCardId: string | null = null;
   private editor: EditorView | null = null;
   private editingCardId: string | null = null;
@@ -104,6 +105,7 @@ export class VisualCardWriterView extends TextFileView {
   private collapsedCardIds = new Set<string>();
   private layoutResizeObserver: ResizeObserver | null = null;
   private layoutAnimationFrame: number | null = null;
+  private renderingCardLayoutGeneration: number | null = null;
   private zoomLevel = 1;
   private collapseStateInitialized = false;
   private viewportScrollAnimationFrame: number | null = null;
@@ -113,6 +115,22 @@ export class VisualCardWriterView extends TextFileView {
   private cardTransitionHiddenElements: HTMLElement[] = [];
   private cardTransitionCleanupTimer: number | null = null;
   private layoutOrientation: LayoutOrientation = "horizontal";
+  private cardTransitionOverlay: HTMLElement | null = null;
+  private draggingCardId: string | null = null;
+  private dragTargetCardId: string | null = null;
+  private dragPlacement: CardMovePlacement | null = null;
+  private dropTargetClearTimer: number | null = null;
+  private pendingDropTargetTimer: number | null = null;
+  private pendingDropTargetCardId: string | null = null;
+  private pendingDropPlacement: CardMovePlacement | null = null;
+  private lastDragClientX: number | null = null;
+  private lastDragClientY: number | null = null;
+  private dragWheelAnimationFrame: number | null = null;
+  private pendingDragWheelDeltaX = 0;
+  private pendingDragWheelDeltaY = 0;
+  private dragWheelViewport: HTMLElement | null = null;
+  private dragWheelListener: ((event: WheelEvent) => void) | null = null;
+  private suppressNextCardClick = false;
 
   constructor(leaf: WorkspaceLeaf, private readonly sessions: DocumentSessionRegistry) {
     super(leaf);
@@ -123,7 +141,7 @@ export class VisualCardWriterView extends TextFileView {
   }
 
   getDisplayText(): string {
-    return this.file ? `${this.file.basename} — Cards` : "Visual Card Writer";
+    return this.file ? `${this.file.basename} - Cards` : "Visual Card Writer";
   }
 
   getIcon(): string {
@@ -157,7 +175,11 @@ export class VisualCardWriterView extends TextFileView {
       this.receiveSessionSnapshot(snapshot, true);
       return;
     }
-    this.applyDocumentText(this.session?.text ?? data);
+    const nextText = this.session?.text ?? data;
+    if (!clear && nextText === this.data && this.hasRenderedDocument()) {
+      return;
+    }
+    this.applyDocumentText(nextText);
   }
 
   clear(): void {
@@ -169,7 +191,7 @@ export class VisualCardWriterView extends TextFileView {
     this.renderComponent = null;
     this.stopCardLayout();
     this.contentEl.empty();
-    this.parsed = { cards: [], roots: [], issues: [], prologue: "" };
+    this.parsed = { structure: "headings", cards: [], roots: [], issues: [], prologue: "" };
     this.selectedCardId = null;
     this.collapsedCardIds.clear();
     this.columnWidths.clear();
@@ -266,7 +288,7 @@ export class VisualCardWriterView extends TextFileView {
     this.editingBaseMarkdown = card.markdown;
     this.sessionConflict = false;
     this.pendingSessionSnapshot = null;
-    const requiredPrefix = `${"#".repeat(card.level)} `;
+    const requiredPrefix = card.kind === "heading" ? `${"#".repeat(card.level)} ` : null;
 
     this.editor = new EditorView({
       parent: host,
@@ -292,7 +314,7 @@ export class VisualCardWriterView extends TextFileView {
               return transaction;
             }
             const fragment = transaction.newDoc.toString();
-            if (!fragment.startsWith(requiredPrefix)) {
+            if (requiredPrefix && !fragment.startsWith(requiredPrefix)) {
               new Notice(`The structural ${requiredPrefix.trim()} prefix is protected in this editor.`);
               return [];
             }
@@ -345,7 +367,7 @@ export class VisualCardWriterView extends TextFileView {
       })
     });
     this.editorMounts += 1;
-    if (selectHeadingTitle && card.title.length > 0) {
+    if (requiredPrefix && selectHeadingTitle && card.title.length > 0) {
       const titleStart = card.markdown.indexOf(card.title, requiredPrefix.length);
       if (titleStart >= 0) {
         this.editor.dispatch({
@@ -365,18 +387,30 @@ export class VisualCardWriterView extends TextFileView {
       return;
     }
     const previous = this.editingCard();
+    const previousDocument = this.parsed;
     this.destroyEditor();
     const next = parseCardDocument(this.data);
     this.parsed = next;
+    const selectedCard = previous ? reconcileCard(previous, next) : null;
     if (previous) {
-      this.selectedCardId = reconcileCard(previous, next)?.id ?? next.roots[0] ?? null;
+      this.selectedCardId = selectedCard?.id ?? next.roots[0] ?? null;
+    }
+    if (
+      previous &&
+      selectedCard &&
+      this.canPatchEditedCardInPlace(previousDocument, next) &&
+      await this.renderCardBody(selectedCard.id)
+    ) {
+      this.updateSelectionPresentation();
+      this.layoutCards();
+    } else {
+      await this.renderView();
+    }
+    if (this.selectedCardId) {
+      this.cardElement(this.selectedCardId)?.focus({ preventScroll: true });
     }
     if (persist) {
       await this.save();
-    }
-    await this.renderView();
-    if (this.selectedCardId) {
-      this.cardElement(this.selectedCardId)?.focus({ preventScroll: true });
     }
   }
 
@@ -405,11 +439,11 @@ export class VisualCardWriterView extends TextFileView {
 
   canCreateChildCard(cardId = this.selectedCardId): boolean {
     const card = cardId ? this.cardById(cardId) : null;
-    return card != null && card.level < 6 && !hasBlockingIssues(this.parsed) && !this.sessionConflict;
+    return card != null && this.parsed.structure === "headings" && card.level < 6 && !hasBlockingIssues(this.parsed) && !this.sessionConflict;
   }
 
   canCreateSiblingCard(cardId = this.selectedCardId): boolean {
-    return cardId != null && this.cardById(cardId) != null && !hasBlockingIssues(this.parsed) && !this.sessionConflict;
+    return cardId != null && this.parsed.structure === "headings" && this.cardById(cardId) != null && !hasBlockingIssues(this.parsed) && !this.sessionConflict;
   }
 
   async createChildCard(cardId = this.selectedCardId): Promise<void> {
@@ -445,7 +479,7 @@ export class VisualCardWriterView extends TextFileView {
     };
   }
 
-  private async renderView(): Promise<void> {
+  private async renderView(minBusyMs = 0): Promise<void> {
     if (this.editor) {
       return;
     }
@@ -454,6 +488,7 @@ export class VisualCardWriterView extends TextFileView {
     const previousScrollLeft = previousViewport?.scrollLeft ?? 0;
     const previousScrollTop = previousViewport?.scrollTop ?? 0;
     const generation = ++this.renderGeneration;
+    this.renderingCardLayoutGeneration = generation;
     this.renderComponent?.unload();
     this.stopCardLayout();
     this.layoutResizeObserver = new ResizeObserver(() => this.scheduleCardLayout());
@@ -471,7 +506,7 @@ export class VisualCardWriterView extends TextFileView {
       text: `${Math.round(this.zoomLevel * 100)}%`,
       attr: {
         "aria-label": "Reset card zoom",
-        title: "Middle-drag to pan · Ctrl/Cmd + wheel to zoom · Click to reset"
+        title: "Middle-drag to pan - Wheel to scroll - Shift + wheel sideways - Ctrl/Cmd + wheel to zoom - Click to reset"
       }
     });
     zoomButton.addEventListener("click", () => {
@@ -481,6 +516,32 @@ export class VisualCardWriterView extends TextFileView {
       }
       const bounds = viewport.getBoundingClientRect();
       this.setZoomAtViewportPoint(1, viewport, bounds.width / 2, bounds.height / 2);
+    });
+    const expandAllButton = toolbar.createEl("button", {
+      cls: ["visual-card-writer-toolbar-button", "clickable-icon"],
+      attr: {
+        "aria-label": "Expand all cards",
+        title: "Expand all cards"
+      }
+    });
+    setIcon(expandAllButton, "maximize-2");
+    expandAllButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.expandAllCards();
+    });
+    const collapseAllButton = toolbar.createEl("button", {
+      cls: ["visual-card-writer-toolbar-button", "clickable-icon"],
+      attr: {
+        "aria-label": "Collapse all cards",
+        title: "Collapse all cards"
+      }
+    });
+    setIcon(collapseAllButton, "minimize-2");
+    collapseAllButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.collapseAllCards();
     });
     const markdownButton = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Open Markdown editor" } });
     setIcon(markdownButton, "file-text");
@@ -504,6 +565,7 @@ export class VisualCardWriterView extends TextFileView {
         item.createEl("p", { text: guidance.explanation });
         item.createEl("p", { cls: "visual-card-writer-hierarchy-resolution", text: guidance.resolution });
       }
+      this.finishRenderingCardLayout(generation);
       const actions = guidancePanel.createDiv({ cls: "visual-card-writer-hierarchy-actions" });
       const openMarkdownButton = actions.createEl("button", { text: "Open Markdown editor" });
       openMarkdownButton.addEventListener("click", () => void this.switchToMarkdown());
@@ -511,22 +573,26 @@ export class VisualCardWriterView extends TextFileView {
     }
 
     const path = this.selectedPath();
-    const breadcrumb = this.contentEl.createDiv({ cls: "visual-card-writer-breadcrumb", attr: { "aria-label": "Active card path" } });
-    path.forEach((card, index) => {
-      const button = breadcrumb.createEl("button", { text: card.title || "Untitled" });
-      button.addEventListener("click", () => void this.selectCard(card.id));
-      if (index < path.length - 1) {
-        breadcrumb.createSpan({ text: "›" });
-      }
-    });
+    this.renderBreadcrumb(path);
 
     const columnsElement = this.contentEl.createDiv({
       cls: "visual-card-writer-columns",
       attr: { role: "tree", "aria-label": "Card hierarchy" }
     });
+    const busyStartedAt = window.performance.now();
+    const busy = columnsElement.createDiv({
+      cls: "visual-card-writer-render-busy",
+      attr: { role: "status", "aria-label": "Rendering cards" }
+    });
+    busy.createDiv({ cls: "visual-card-writer-render-spinner" });
     const scene = columnsElement.createDiv({ cls: "visual-card-writer-scene" });
     const surface = scene.createDiv({ cls: "visual-card-writer-surface" });
     this.configureViewport(columnsElement);
+    await this.waitForNextPaint();
+    if (generation !== this.renderGeneration) {
+      component.unload();
+      return;
+    }
     const visibleCards = getVisibleCards(this.parsed.cards, this.collapsedCardIds);
     const columns = groupCardsByDepth(visibleCards);
     const activePathIds = new Set(path.map((card) => card.id));
@@ -560,6 +626,7 @@ export class VisualCardWriterView extends TextFileView {
           attr: {
             "data-card-id": card.id,
             "data-level": String(card.level),
+            draggable: "false",
             role: "treeitem",
             tabindex: "0",
             "aria-level": String(card.depth + 1),
@@ -576,9 +643,10 @@ export class VisualCardWriterView extends TextFileView {
         cardElement.setAttribute(
           "title",
           this.layoutOrientation === "horizontal"
-            ? "Drag the right edge to resize the column or the bottom edge to resize this card. Double-click a handle to reset."
-            : "Drag the right edge to resize every card at this level or the bottom edge to resize this card. Double-click a handle to reset."
+            ? "Drag the card to reorder it. Drag the right edge to resize the column or the bottom edge to resize this card. Double-click a handle to reset."
+            : "Drag the card to reorder it. Drag the right edge to resize every card at this level or the bottom edge to resize this card. Double-click a handle to reset."
         );
+        cardElement.draggable = false;
         if (hasChildren) {
           cardElement.setAttribute("aria-expanded", String(!isCollapsed));
           const toggle = cardElement.createEl("button", {
@@ -608,7 +676,7 @@ export class VisualCardWriterView extends TextFileView {
           });
           const warningIcon = warningButton.createSpan({ cls: "visual-card-writer-heading-jump-icon" });
           setIcon(warningIcon, "triangle-alert");
-          warningButton.createSpan({ text: `H${headingJump.currentLevel} · expected H${headingJump.expectedLevel}` });
+          warningButton.createSpan({ text: `H${headingJump.currentLevel} - expected H${headingJump.expectedLevel}` });
           warningButton.addEventListener("click", (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -635,13 +703,15 @@ export class VisualCardWriterView extends TextFileView {
         const addChildButton = cardElement.createEl("button", {
           cls: ["visual-card-writer-add-child-button", "clickable-icon"],
           attr: {
-            "aria-label": card.level < 6 ? "Add child card" : "Cannot add a child below H6",
-            title: card.level < 6
+            "aria-label": this.canCreateChildCard(card.id) ? "Add child card" : "Cannot add a child card here",
+            title: this.canCreateChildCard(card.id)
               ? "Add child card (Ctrl/Cmd + Right Arrow)"
-              : "Markdown supports at most six heading levels"
+              : this.parsed.structure === "slides"
+                ? "Slides cannot be nested"
+                : "Markdown supports at most six heading levels"
           }
         });
-        addChildButton.disabled = card.level >= 6;
+        addChildButton.disabled = !this.canCreateChildCard(card.id);
         setIcon(addChildButton, "plus");
         addChildButton.addEventListener("click", (event) => {
           event.preventDefault();
@@ -652,9 +722,10 @@ export class VisualCardWriterView extends TextFileView {
         addChildButton.addEventListener("keydown", (event) => event.stopPropagation());
         this.createCardResizeHandles(cardElement, card.id, depth);
         this.layoutResizeObserver.observe(cardElement);
+        this.configureCardDrag(cardElement, card);
         const body = cardElement.createDiv({ cls: ["visual-card-writer-card-body", "markdown-rendered"] });
         cardElement.addEventListener("click", (event) => {
-          if (this.isInsideActiveEditor(event)) {
+          if (this.consumeSuppressedCardClick(event) || this.isInsideActiveEditor(event)) {
             return;
           }
           void this.selectCard(card.id);
@@ -666,16 +737,32 @@ export class VisualCardWriterView extends TextFileView {
           void this.startEditing(card.id);
         });
         cardElement.addEventListener("keydown", (event) => this.handleCardKeydown(event, card, ids));
-        await MarkdownRenderer.render(this.app, card.markdown, body, this.file?.path ?? "", component);
+        try {
+          await MarkdownRenderer.render(this.app, card.markdown, body, this.file?.path ?? "", component);
+        } catch (error) {
+          body.setText(card.markdown);
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`Visual Card Writer could not render ${card.id}: ${message}`);
+        }
         if (generation !== this.renderGeneration) {
           component.unload();
           return;
         }
       }
     }
-    this.layoutCards();
+    this.finishRenderingCardLayout(generation);
+    this.layoutCards(false);
     columnsElement.scrollLeft = previousScrollLeft;
     columnsElement.scrollTop = previousScrollTop;
+    const remainingBusyMs = minBusyMs - (window.performance.now() - busyStartedAt);
+    if (remainingBusyMs > 0) {
+      await this.wait(remainingBusyMs);
+      if (generation !== this.renderGeneration) {
+        component.unload();
+        return;
+      }
+    }
+    columnsElement.addClass("is-laid-out");
   }
 
   private async selectCard(cardId: string): Promise<void> {
@@ -684,17 +771,25 @@ export class VisualCardWriterView extends TextFileView {
       await this.finishEditing(true);
     }
     this.selectedCardId = cardId;
-    this.expandCard(cardId);
-    await this.renderView();
+    const transition = this.collapsedCardIds.has(cardId) ? this.captureCardTransition(cardId) : null;
+    const visibleCardsChanged = this.expandCard(cardId);
+    if (visibleCardsChanged) {
+      await this.renderView();
+      this.animateCardTransition(transition);
+    } else {
+      this.updateSelectionPresentation();
+    }
     const element = this.cardElement(cardId);
     element?.focus({ preventScroll: true });
     this.animateViewportToCard(cardId);
   }
 
-  private expandCard(cardId: string | null): void {
-    if (cardId) {
-      this.collapsedCardIds.delete(cardId);
+  private expandCard(cardId: string | null): boolean {
+    if (!cardId || !this.collapsedCardIds.has(cardId)) {
+      return false;
     }
+    this.collapsedCardIds.delete(cardId);
+    return true;
   }
 
   private handleCardKeydown(event: KeyboardEvent, card: CardNode, siblings: string[]): void {
@@ -934,6 +1029,539 @@ export class VisualCardWriterView extends TextFileView {
     this.session?.commit(this.data, this, "local");
   }
 
+  private updateSelectionPresentation(): void {
+    const path = this.selectedPath();
+    const activePathIds = new Set(path.map((card) => card.id));
+    this.renderBreadcrumb(path);
+    for (const element of this.contentEl.querySelectorAll<HTMLElement>(".visual-card-writer-card")) {
+      const cardId = element.dataset.cardId;
+      const card = cardId ? this.cardById(cardId) : null;
+      if (!card || !cardId) {
+        continue;
+      }
+      const emphasis = getCardEmphasis(card, this.selectedCardId, activePathIds);
+      element.removeClass("is-selected", "is-active-path", "is-available", "is-next-choice", "is-deemphasized");
+      element.addClass(`is-${emphasis}`);
+      element.dataset.emphasis = emphasis;
+      element.setAttribute("aria-selected", String(cardId === this.selectedCardId));
+    }
+  }
+
+  private hasRenderedDocument(): boolean {
+    return this.contentEl.querySelector(".visual-card-writer-columns, .visual-card-writer-hierarchy-guidance") != null;
+  }
+
+  private canPatchEditedCardInPlace(previous: CardDocument, next: CardDocument): boolean {
+    if (previous.structure !== next.structure || previous.cards.length !== next.cards.length) {
+      return false;
+    }
+    for (let index = 0; index < previous.cards.length; index += 1) {
+      const before = previous.cards[index];
+      const after = next.cards[index];
+      if (
+        before.id !== after.id ||
+        before.kind !== after.kind ||
+        before.level !== after.level ||
+        before.depth !== after.depth ||
+        before.parentId !== after.parentId ||
+        before.children.join("\u0000") !== after.children.join("\u0000")
+      ) {
+        return false;
+      }
+    }
+    return previous.roots.join("\u0000") === next.roots.join("\u0000") && !hasBlockingIssues(next);
+  }
+
+  private async renderCardBody(cardId: string): Promise<boolean> {
+    const card = this.cardById(cardId);
+    const body = this.cardBodyElement(cardId);
+    if (!card || !body || !this.renderComponent) {
+      return false;
+    }
+    body.empty();
+    body.removeClass("visual-card-writer-editor-host");
+    this.cardElement(cardId)?.removeClass("is-editing");
+    try {
+      await MarkdownRenderer.render(this.app, card.markdown, body, this.file?.path ?? "", this.renderComponent);
+    } catch (error) {
+      body.setText(card.markdown);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Visual Card Writer could not render ${card.id}: ${message}`);
+    }
+    return true;
+  }
+
+  private renderBreadcrumb(path: CardNode[]): void {
+    let breadcrumb = this.contentEl.querySelector<HTMLElement>(".visual-card-writer-breadcrumb");
+    if (!breadcrumb) {
+      breadcrumb = this.contentEl.createDiv({ cls: "visual-card-writer-breadcrumb" });
+    }
+    breadcrumb.empty();
+    for (let index = 0; index < path.length; index += 1) {
+      const card = path[index];
+      const button = breadcrumb.createEl("button", { text: card.title || "Untitled" });
+      button.addEventListener("click", () => void this.selectCard(card.id));
+      if (index < path.length - 1) {
+        breadcrumb.createSpan({ text: ">" });
+      }
+    }
+  }
+
+  private finishRenderingCardLayout(generation: number): void {
+    if (this.renderingCardLayoutGeneration === generation) {
+      this.renderingCardLayoutGeneration = null;
+    }
+  }
+
+  private waitForNextPaint(): Promise<void> {
+    return new Promise((resolve) => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  private wait(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => {
+      window.setTimeout(() => resolve(), milliseconds);
+    });
+  }
+
+  private async expandAllCards(): Promise<void> {
+    if (this.editor) {
+      await this.finishEditing(true);
+    }
+    if (this.collapsedCardIds.size === 0) {
+      return;
+    }
+    this.cancelCardTransition();
+    this.collapsedCardIds.clear();
+    await this.renderView(180);
+  }
+
+  private async collapseAllCards(): Promise<void> {
+    if (this.editor) {
+      await this.finishEditing(true);
+    }
+    const selectedRoot = this.rootCardIdForSelection();
+    const transition = this.captureCardTransition(this.selectedCardId ?? selectedRoot ?? "");
+    this.collapsedCardIds = new Set(getBranchCardIds(this.parsed.cards));
+    this.selectedCardId = selectedRoot ?? this.parsed.roots[0] ?? null;
+    await this.renderView();
+    this.animateCardTransition(transition);
+  }
+
+  private rootCardIdForSelection(): string | null {
+    let current = this.selectedCardId ? this.cardById(this.selectedCardId) : null;
+    if (!current) {
+      return this.parsed.roots[0] ?? null;
+    }
+    while (current.parentId) {
+      const parent = this.cardById(current.parentId);
+      if (!parent) {
+        break;
+      }
+      current = parent;
+    }
+    return current.id;
+  }
+
+  private configureCardDrag(cardElement: HTMLElement, card: CardNode): void {
+    let pointerId: number | null = null;
+    let startX = 0;
+    let startY = 0;
+    let hasStartedDrag = false;
+    const dragThreshold = 5;
+
+    const isInteractiveTarget = (target: EventTarget | null): boolean => {
+      return target instanceof Element && target.closest("button, a, input, textarea, select, .visual-card-writer-resize-handle, .cm-editor") != null;
+    };
+
+    const startPointerDrag = (event: PointerEvent): void => {
+      hasStartedDrag = true;
+      this.draggingCardId = card.id;
+      this.lastDragClientX = event.clientX;
+      this.lastDragClientY = event.clientY;
+      this.containerEl.addClass("is-dragging-card");
+      const viewport = cardElement.closest<HTMLElement>(".visual-card-writer-columns");
+      if (viewport) {
+        this.startDragWheelListener(viewport);
+      }
+      cardElement.addClass("is-dragging");
+      this.updateDropTargetFromDragPoint();
+    };
+
+    const finishPointerDrag = (event: PointerEvent, shouldDrop: boolean): void => {
+      if (pointerId !== event.pointerId) {
+        return;
+      }
+      const sourceCardId = this.draggingCardId;
+      const dropTarget = shouldDrop ? this.dropTargetFromDragPoint() : null;
+      const didDrag = hasStartedDrag;
+      pointerId = null;
+      hasStartedDrag = false;
+      cardElement.removeClass("is-dragging");
+      this.containerEl.removeClass("is-dragging-card");
+      this.clearDragWheelState();
+      if (cardElement.hasPointerCapture(event.pointerId)) {
+        cardElement.releasePointerCapture(event.pointerId);
+      }
+      if (!didDrag) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.suppressNextCardClick = true;
+      window.setTimeout(() => {
+        this.suppressNextCardClick = false;
+      }, 200);
+      if (sourceCardId && dropTarget) {
+        void this.moveCardByDrop(sourceCardId, dropTarget.cardId, dropTarget.placement);
+        return;
+      }
+      this.draggingCardId = null;
+      this.clearDropTarget();
+    };
+
+    cardElement.addEventListener("dragstart", (event) => event.preventDefault());
+    cardElement.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || !event.isPrimary || isInteractiveTarget(event.target)) {
+        return;
+      }
+      pointerId = event.pointerId;
+      startX = event.clientX;
+      startY = event.clientY;
+      hasStartedDrag = false;
+      try {
+        cardElement.setPointerCapture(event.pointerId);
+      } catch {
+        // Synthetic pointer events do not always own a capturable pointer.
+      }
+    });
+    cardElement.addEventListener("pointermove", (event) => {
+      if (pointerId !== event.pointerId) {
+        return;
+      }
+      if (!hasStartedDrag) {
+        const distance = Math.hypot(event.clientX - startX, event.clientY - startY);
+        if (distance < dragThreshold) {
+          return;
+        }
+        startPointerDrag(event);
+      }
+      event.preventDefault();
+      this.rememberDragPointer(event);
+      this.updateDropTargetFromDragPoint();
+    });
+    cardElement.addEventListener("pointerup", (event) => finishPointerDrag(event, true));
+    cardElement.addEventListener("pointercancel", (event) => finishPointerDrag(event, false));
+    cardElement.addEventListener("lostpointercapture", (event) => {
+      if (pointerId === event.pointerId) {
+        finishPointerDrag(event, false);
+      }
+    });
+  }
+  private dropPlacementForEvent(event: DragEvent, target: CardNode): CardMovePlacement {
+    return this.dropPlacementForPoint(event.clientX, event.clientY, target);
+  }
+
+  private dropPlacementForPoint(clientX: number, clientY: number, target: CardNode): CardMovePlacement {
+    const element = this.cardElement(target.id);
+    if (!element) {
+      return "after";
+    }
+    const rect = element.getBoundingClientRect();
+    return getDropPlacementForPoint(
+      { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+      { x: clientX, y: clientY },
+      this.layoutOrientation,
+      this.parsed.structure === "headings"
+    );
+  }
+
+  private rememberDragPointer(event: DragEvent | PointerEvent | WheelEvent): void {
+    if (event.clientX === 0 && event.clientY === 0) {
+      return;
+    }
+    this.lastDragClientX = event.clientX;
+    this.lastDragClientY = event.clientY;
+  }
+
+  private updateDropTargetFromDragPoint(): void {
+    const target = this.dropTargetFromDragPoint();
+    if (!target) {
+      this.scheduleDropTargetClear();
+      return;
+    }
+    this.scheduleDropTarget(target.cardId, target.placement);
+  }
+
+  private dropTargetFromDragPoint(): { cardId: string; placement: CardMovePlacement } | null {
+    if (!this.draggingCardId || this.lastDragClientX == null || this.lastDragClientY == null) {
+      return null;
+    }
+    const element = document.elementFromPoint(this.lastDragClientX, this.lastDragClientY);
+    const cardElement = element instanceof Element ? element.closest<HTMLElement>(".visual-card-writer-card") : null;
+    const targetCardId = cardElement?.dataset.cardId;
+    const target = targetCardId ? this.cardById(targetCardId) : null;
+    if (!target) {
+      return null;
+    }
+    const placement = this.dropPlacementForPoint(this.lastDragClientX, this.lastDragClientY, target);
+    if (!this.canDropCard(this.draggingCardId, target.id, placement)) {
+      return null;
+    }
+    return { cardId: target.id, placement };
+  }
+
+  private consumeSuppressedCardClick(event: MouseEvent): boolean {
+    if (!this.suppressNextCardClick) {
+      return false;
+    }
+    this.suppressNextCardClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  }
+
+  private startDragWheelListener(viewport: HTMLElement): void {
+    this.stopDragWheelListener();
+    this.dragWheelViewport = viewport;
+    this.dragWheelListener = (event) => {
+      if (!this.draggingCardId || !this.dragWheelViewport || !this.dragWheelViewport.isConnected) {
+        return;
+      }
+      const hasPointerCoordinates = event.clientX !== 0 || event.clientY !== 0;
+      const clientX = hasPointerCoordinates ? event.clientX : this.lastDragClientX;
+      const clientY = hasPointerCoordinates ? event.clientY : this.lastDragClientY;
+      if (clientX != null && clientY != null) {
+        const bounds = this.dragWheelViewport.getBoundingClientRect();
+        if (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) {
+          return;
+        }
+        this.lastDragClientX = clientX;
+        this.lastDragClientY = clientY;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.cancelViewportScrollAnimation();
+      this.scheduleDragWheelScroll(this.dragWheelViewport, event);
+    };
+    window.addEventListener("wheel", this.dragWheelListener, { capture: true, passive: false });
+  }
+
+  private stopDragWheelListener(): void {
+    if (this.dragWheelListener) {
+      window.removeEventListener("wheel", this.dragWheelListener, true);
+      this.dragWheelListener = null;
+    }
+    this.dragWheelViewport = null;
+  }
+
+  private clearDragWheelState(): void {
+    this.stopDragWheelListener();
+    if (this.dragWheelAnimationFrame != null) {
+      window.cancelAnimationFrame(this.dragWheelAnimationFrame);
+      this.dragWheelAnimationFrame = null;
+    }
+    this.pendingDragWheelDeltaX = 0;
+    this.pendingDragWheelDeltaY = 0;
+    this.lastDragClientX = null;
+    this.lastDragClientY = null;
+  }
+  private canDropCard(sourceCardId: string, targetCardId: string, placement: CardMovePlacement): boolean {
+    if (sourceCardId === targetCardId || this.sessionConflict || hasBlockingIssues(this.parsed)) {
+      return false;
+    }
+    const source = this.cardById(sourceCardId);
+    const target = this.cardById(targetCardId);
+    if (!source || !target) {
+      return false;
+    }
+    if (this.parsed.structure === "slides") {
+      return placement !== "child";
+    }
+    if (this.isDescendantOf(targetCardId, sourceCardId)) {
+      return false;
+    }
+    const nextSourceLevel = placement === "child" ? target.level + 1 : target.level;
+    const levelDelta = nextSourceLevel - source.level;
+    return this.subtreeForCard(sourceCardId).every((card) => {
+      const level = card.level + levelDelta;
+      return level >= 1 && level <= 6;
+    });
+  }
+
+  private scheduleDropTarget(cardId: string, placement: CardMovePlacement): void {
+    this.cancelDropTargetClear();
+    if (this.dragTargetCardId === cardId) {
+      this.dragPlacement = placement;
+      this.cardElement(cardId)?.setAttribute("data-drop-placement", placement);
+      return;
+    }
+    this.pendingDropTargetCardId = cardId;
+    this.pendingDropPlacement = placement;
+    if (this.pendingDropTargetTimer != null) {
+      return;
+    }
+    this.pendingDropTargetTimer = window.setTimeout(() => {
+      const nextCardId = this.pendingDropTargetCardId;
+      const nextPlacement = this.pendingDropPlacement;
+      this.pendingDropTargetTimer = null;
+      this.pendingDropTargetCardId = null;
+      this.pendingDropPlacement = null;
+      if (nextCardId && nextPlacement) {
+        this.setDropTarget(nextCardId, nextPlacement);
+      }
+    }, 55);
+  }
+
+  private setDropTarget(cardId: string, placement: CardMovePlacement): void {
+    this.cancelDropTargetClear();
+    if (this.dragTargetCardId === cardId) {
+      this.dragPlacement = placement;
+      this.cardElement(cardId)?.setAttribute("data-drop-placement", placement);
+      return;
+    }
+    this.clearDropTarget();
+    const element = this.cardElement(cardId);
+    if (!element) {
+      return;
+    }
+    this.dragTargetCardId = cardId;
+    this.dragPlacement = placement;
+    element.addClass("is-drop-target");
+    element.setAttribute("data-drop-placement", placement);
+  }
+
+  private scheduleDropTargetClear(): void {
+    this.cancelPendingDropTarget();
+    if (this.dropTargetClearTimer != null) {
+      return;
+    }
+    this.dropTargetClearTimer = window.setTimeout(() => {
+      this.dropTargetClearTimer = null;
+      this.clearDropTarget();
+    }, 90);
+  }
+
+  private cancelPendingDropTarget(): void {
+    if (this.pendingDropTargetTimer != null) {
+      window.clearTimeout(this.pendingDropTargetTimer);
+      this.pendingDropTargetTimer = null;
+    }
+    this.pendingDropTargetCardId = null;
+    this.pendingDropPlacement = null;
+  }
+
+  private cancelDropTargetClear(): void {
+    if (this.dropTargetClearTimer != null) {
+      window.clearTimeout(this.dropTargetClearTimer);
+      this.dropTargetClearTimer = null;
+    }
+  }
+
+  private clearDropTarget(): void {
+    this.cancelPendingDropTarget();
+    this.cancelDropTargetClear();
+    if (this.dragTargetCardId) {
+      const element = this.cardElement(this.dragTargetCardId);
+      element?.removeClass("is-drop-target", "is-drop-before", "is-drop-after", "is-drop-child");
+      element?.removeAttribute("data-drop-placement");
+    }
+    this.dragTargetCardId = null;
+    this.dragPlacement = null;
+  }
+
+  private async moveCardByDrop(sourceCardId: string, targetCardId: string, placement: CardMovePlacement): Promise<void> {
+    if (this.editor) {
+      await this.finishEditing(true);
+    }
+    const previousData = this.data;
+    const previousDocument = this.parsed;
+    const previousSelectedCardId = this.selectedCardId;
+    const previousCollapsedCardIds = new Set(this.collapsedCardIds);
+    const previousCardHeights = new Map(this.cardHeights);
+    this.cancelCardTransition();
+    try {
+      const result = moveCard(this.data, this.parsed, sourceCardId, targetCardId, placement);
+      this.data = result.text;
+      this.parsed = result.document;
+      this.selectedCardId = result.movedCardId;
+      this.collapsedCardIds = this.remapCardIdSet(previousCollapsedCardIds, result.previousToNextCardIds);
+      this.cardHeights = this.remapCardHeightMap(previousCardHeights, result.previousToNextCardIds);
+      if (placement === "child") {
+        const nextParentId = result.previousToNextCardIds.get(targetCardId);
+        if (nextParentId) {
+          this.collapsedCardIds.delete(nextParentId);
+        }
+      }
+      this.session?.commit(this.data, this, "local");
+      await this.save();
+      await this.renderView();
+      this.cardElement(result.movedCardId)?.focus({ preventScroll: true });
+      this.animateViewportToCard(result.movedCardId);
+    } catch (error) {
+      this.cancelCardTransition();
+      this.data = previousData;
+      this.parsed = previousDocument;
+      this.selectedCardId = previousSelectedCardId;
+      this.collapsedCardIds = previousCollapsedCardIds;
+      this.cardHeights = previousCardHeights;
+      if (this.session?.text !== previousData) {
+        this.session?.commit(previousData, this, "local");
+      }
+      await this.renderView();
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`Could not move the card: ${message}`);
+    } finally {
+      this.draggingCardId = null;
+      this.containerEl.removeClass("is-dragging-card");
+      this.clearDropTarget();
+    }
+  }
+
+  private subtreeForCard(cardId: string): CardNode[] {
+    const startIndex = this.parsed.cards.findIndex((card) => card.id === cardId);
+    if (startIndex === -1) {
+      return [];
+    }
+    const root = this.parsed.cards[startIndex];
+    const result = [root];
+    for (let index = startIndex + 1; index < this.parsed.cards.length; index += 1) {
+      const card = this.parsed.cards[index];
+      if (card.level <= root.level) {
+        break;
+      }
+      result.push(card);
+    }
+    return result;
+  }
+
+  private remapCardIdSet(cardIds: ReadonlySet<string>, mapping: ReadonlyMap<string, string>): Set<string> {
+    const result = new Set<string>();
+    for (const cardId of cardIds) {
+      const nextCardId = mapping.get(cardId);
+      if (nextCardId) {
+        result.add(nextCardId);
+      }
+    }
+    return result;
+  }
+
+  private remapCardHeightMap(
+    heights: ReadonlyMap<string, number>,
+    mapping: ReadonlyMap<string, string>
+  ): Map<string, number> {
+    const result = new Map<string, number>();
+    for (const [cardId, height] of heights) {
+      const nextCardId = mapping.get(cardId);
+      if (nextCardId) {
+        result.set(nextCardId, height);
+      }
+    }
+    return result;
+  }
   private selectedPath(): CardNode[] {
     const path: CardNode[] = [];
     let current = this.selectedCardId ? this.cardById(this.selectedCardId) : null;
@@ -996,7 +1624,7 @@ export class VisualCardWriterView extends TextFileView {
         "aria-valuemin": "160",
         "aria-valuemax": "1100",
         "aria-valuenow": String(Math.round(card.offsetWidth)),
-        title: "Drag to resize every card in this column · Double-click to reset"
+        title: "Drag to resize every card in this column - Double-click to reset"
       }
     });
     const vertical = card.createDiv({
@@ -1009,7 +1637,7 @@ export class VisualCardWriterView extends TextFileView {
         "aria-valuemin": "72",
         "aria-valuemax": "4000",
         "aria-valuenow": String(Math.round(card.offsetHeight)),
-        title: "Drag to resize only this card · Double-click to reset"
+        title: "Drag to resize only this card - Double-click to reset"
       }
     });
     const corner = card.createDiv({
@@ -1398,18 +2026,67 @@ export class VisualCardWriterView extends TextFileView {
       "wheel",
       (event) => {
         this.cancelViewportScrollAnimation();
-        if (!event.ctrlKey && !event.metaKey) {
+        if (this.draggingCardId) {
+          event.preventDefault();
+          this.rememberDragPointer(event);
+          this.scheduleDragWheelScroll(viewport, event);
           return;
         }
-        event.preventDefault();
-        const nextZoom = zoomFromWheel(this.zoomLevel, event.deltaY);
-        const bounds = viewport.getBoundingClientRect();
-        this.setZoomAtViewportPoint(nextZoom, viewport, event.clientX - bounds.left, event.clientY - bounds.top);
+        if (event.ctrlKey || event.metaKey) {
+          event.preventDefault();
+          const nextZoom = zoomFromWheel(this.zoomLevel, event.deltaY);
+          const bounds = viewport.getBoundingClientRect();
+          this.setZoomAtViewportPoint(nextZoom, viewport, event.clientX - bounds.left, event.clientY - bounds.top);
+          return;
+        }
+        if (event.shiftKey) {
+          const delta = this.normalizedWheelDelta(event, viewport);
+          if (Math.abs(delta.y) > Math.abs(delta.x)) {
+            event.preventDefault();
+            viewport.scrollLeft += delta.y;
+          }
+        }
       },
       { passive: false }
     );
   }
 
+  private normalizedWheelDelta(event: WheelEvent, viewport: HTMLElement): { x: number; y: number } {
+    let multiplier = 1;
+    if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+      multiplier = 40;
+    } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+      multiplier = Math.max(1, viewport.clientHeight);
+    }
+    return {
+      x: event.deltaX * multiplier,
+      y: event.deltaY * multiplier
+    };
+  }
+
+  private scheduleDragWheelScroll(viewport: HTMLElement, event: WheelEvent): void {
+    const delta = this.normalizedWheelDelta(event, viewport);
+    const useVerticalWheelForHorizontalScroll = event.shiftKey && Math.abs(delta.y) >= Math.abs(delta.x);
+    this.pendingDragWheelDeltaX += useVerticalWheelForHorizontalScroll ? delta.y : delta.x;
+    this.pendingDragWheelDeltaY += useVerticalWheelForHorizontalScroll ? 0 : delta.y;
+    if (this.dragWheelAnimationFrame != null) {
+      return;
+    }
+    this.dragWheelAnimationFrame = window.requestAnimationFrame(() => {
+      this.dragWheelAnimationFrame = null;
+      const deltaX = this.pendingDragWheelDeltaX;
+      const deltaY = this.pendingDragWheelDeltaY;
+      this.pendingDragWheelDeltaX = 0;
+      this.pendingDragWheelDeltaY = 0;
+      const previousLeft = viewport.scrollLeft;
+      const previousTop = viewport.scrollTop;
+      viewport.scrollLeft += deltaX;
+      viewport.scrollTop += deltaY;
+      if (viewport.scrollLeft !== previousLeft || viewport.scrollTop !== previousTop) {
+        this.updateDropTargetFromDragPoint();
+      }
+    });
+  }
   private setZoomAtViewportPoint(
     nextZoom: number,
     viewport: HTMLElement,
@@ -1486,7 +2163,18 @@ export class VisualCardWriterView extends TextFileView {
       ghost.style.setProperty("--vcw-ghost-width", `${rect.width}px`);
       ghost.style.setProperty("--vcw-ghost-height", `${rect.height}px`);
       ghost.style.setProperty("--vcw-ghost-opacity", String(opacity));
-      document.body.appendChild(ghost);
+      if (!this.cardTransitionOverlay) {
+        const viewportRect = viewport.getBoundingClientRect();
+        this.cardTransitionOverlay = document.body.createDiv({ cls: "visual-card-writer-transition-overlay" });
+        this.cardTransitionOverlay.style.setProperty("--vcw-overlay-top", `${viewportRect.top}px`);
+        this.cardTransitionOverlay.style.setProperty("--vcw-overlay-left", `${viewportRect.left}px`);
+        this.cardTransitionOverlay.style.setProperty("--vcw-overlay-width", `${viewportRect.width}px`);
+        this.cardTransitionOverlay.style.setProperty("--vcw-overlay-height", `${viewportRect.height}px`);
+      }
+      const viewportRect = viewport.getBoundingClientRect();
+      ghost.style.setProperty("--vcw-ghost-top", `${rect.top - viewportRect.top}px`);
+      ghost.style.setProperty("--vcw-ghost-left", `${rect.left - viewportRect.left}px`);
+      this.cardTransitionOverlay.appendChild(ghost);
       this.cardTransitionGhosts.push(ghost);
       items.push({ id, rect, opacity, ghost });
     }
@@ -1655,7 +2343,7 @@ export class VisualCardWriterView extends TextFileView {
   }
 
   private scheduleCardLayout(): void {
-    if (this.layoutAnimationFrame != null) {
+    if (this.renderingCardLayoutGeneration != null || this.layoutAnimationFrame != null) {
       return;
     }
     this.layoutAnimationFrame = window.requestAnimationFrame(() => {
@@ -1664,7 +2352,7 @@ export class VisualCardWriterView extends TextFileView {
     });
   }
 
-  private layoutCards(): void {
+  private layoutCards(reveal = true): void {
     const columnsElement = this.contentEl.querySelector<HTMLElement>(".visual-card-writer-columns");
     if (!columnsElement) {
       return;
@@ -1754,7 +2442,9 @@ export class VisualCardWriterView extends TextFileView {
       scene.dataset.worldHeight = String(sceneHeight);
       this.applyZoomGeometry(columnsElement);
     }
-    columnsElement.addClass("is-laid-out");
+    if (reveal) {
+      columnsElement.addClass("is-laid-out");
+    }
   }
 
   private stopCardLayout(): void {

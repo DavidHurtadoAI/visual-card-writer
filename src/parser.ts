@@ -14,12 +14,19 @@ interface StructuralHeading {
 
 interface FrontmatterRange {
   end: number;
+  marp: boolean;
 }
 
 const ATX_PATTERN = /^ {0,3}(#{1,6})(?:[\t ]+|$)/;
+const SLIDE_SEPARATOR_PATTERN = /^ {0,3}---[\t ]*$/;
 
 export function parseCardDocument(source: string): CardDocument {
   const frontmatter = findFrontmatter(source);
+  const contentStart = frontmatter?.end ?? 0;
+  const slideSeparators = frontmatter?.marp ? findSlideSeparators(source, contentStart) : [];
+  if (slideSeparators.length > 0) {
+    return parseSlideDocument(source, contentStart, slideSeparators);
+  }
   const parseSource = frontmatter ? maskFrontmatter(source, frontmatter.end) : source;
   const tree = fromMarkdown(parseSource);
   const headings = tree.children
@@ -29,6 +36,7 @@ export function parseCardDocument(source: string): CardDocument {
 
   if (headings.length === 0) {
     return {
+      structure: "headings",
       cards: [],
       roots: [],
       issues: [{ kind: "no-headings", line: 1, message: "The note does not contain a structural ATX heading." }],
@@ -50,6 +58,7 @@ export function parseCardDocument(source: string): CardDocument {
     const parent = heading.level > 1 ? stack[stack.length - 1] ?? null : null;
     const card: CardNode = {
       id,
+      kind: "heading",
       level: heading.level,
       depth: parent ? parent.depth + 1 : 0,
       title: heading.title,
@@ -66,13 +75,11 @@ export function parseCardDocument(source: string): CardDocument {
     }
     stack.push(card);
   });
-
-  const contentStart = frontmatter?.end ?? 0;
-  return { cards, roots, issues, prologue: source.slice(contentStart, headings[0].start) };
+  return { structure: "headings", cards, roots, issues, prologue: source.slice(contentStart, headings[0].start) };
 }
 
 export function needsRootHeading(document: CardDocument): boolean {
-  return document.cards.length === 0 || document.cards[0].level !== 1;
+  return document.structure === "headings" && (document.cards.length === 0 || document.cards[0].level !== 1);
 }
 
 export function hasBlockingIssues(document: CardDocument): boolean {
@@ -110,6 +117,88 @@ export function reconcileCard(previous: CardNode, next: CardDocument): CardNode 
   );
 }
 
+function parseSlideDocument(source: string, contentStart: number, separators: number[]): CardDocument {
+  const cards: CardNode[] = [];
+  const roots: string[] = [];
+  const starts = [contentStart, ...separators.map((start) => lineEndOffset(source, start))];
+  const ends = [...separators, source.length];
+  for (let index = 0; index < starts.length; index += 1) {
+    const start = starts[index];
+    const end = ends[index];
+    const markdown = source.slice(start, end);
+    const id = `card-${index}`;
+    cards.push({
+      id,
+      kind: "slide",
+      level: 1,
+      depth: 0,
+      title: slideTitle(markdown, index + 1),
+      markdown,
+      parentId: null,
+      children: [],
+      range: { start, headingEnd: start, end, line: lineNumberAtOffset(source, start) }
+    });
+    roots.push(id);
+  }
+  return {
+    structure: "slides",
+    cards,
+    roots,
+    issues: [],
+    prologue: source.slice(contentStart, starts[0] ?? contentStart)
+  };
+}
+
+function findSlideSeparators(source: string, startOffset: number): number[] {
+  const separators: number[] = [];
+  let cursor = startOffset;
+  let fencedCodeMarker: string | null = null;
+  while (cursor <= source.length) {
+    const lineEnd = source.indexOf("\n", cursor);
+    const end = lineEnd === -1 ? source.length : lineEnd;
+    const rawLine = source.slice(cursor, end).replace(/\r$/, "");
+    const fence = /^ {0,3}(`{3,}|~{3,})/.exec(rawLine);
+    if (fence) {
+      const marker = fence[1][0];
+      if (fencedCodeMarker === marker) {
+        fencedCodeMarker = null;
+      } else if (fencedCodeMarker == null) {
+        fencedCodeMarker = marker;
+      }
+    } else if (fencedCodeMarker == null && SLIDE_SEPARATOR_PATTERN.test(rawLine)) {
+      separators.push(cursor);
+    }
+    if (lineEnd === -1) {
+      break;
+    }
+    cursor = lineEnd + 1;
+  }
+  return separators;
+}
+
+function lineEndOffset(source: string, lineStart: number): number {
+  const lineEnd = source.indexOf("\n", lineStart);
+  return lineEnd === -1 ? source.length : lineEnd + 1;
+}
+
+function lineNumberAtOffset(source: string, offset: number): number {
+  let line = 1;
+  for (let index = 0; index < offset; index += 1) {
+    if (source.charCodeAt(index) === 10) {
+      line += 1;
+    }
+  }
+  return line;
+}
+
+function slideTitle(markdown: string, slideNumber: number): string {
+  const heading = markdown.match(/^ {0,3}#{1,6}[\t ]+(.+)$/m);
+  if (heading) {
+    return heading[1].replace(/[\t ]+#+[\t ]*$/, "").trim() || `Slide ${slideNumber}`;
+  }
+  const firstText = markdown.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length > 0);
+  return firstText ? firstText.slice(0, 80) : `Slide ${slideNumber}`;
+}
 function toStructuralHeading(source: string, node: Heading): StructuralHeading | null {
   const position = node.position;
   if (!position || position.start.offset == null || position.end.offset == null) {
@@ -172,12 +261,17 @@ function findFrontmatter(source: string): FrontmatterRange | null {
     return null;
   }
   let cursor = openingEnd + 1;
+  let marp = false;
   while (cursor <= source.length) {
     const lineEnd = source.indexOf("\n", cursor);
     const end = lineEnd === -1 ? source.length : lineEnd;
-    const line = source.slice(cursor, end).replace(/\r$/, "").trim();
+    const rawLine = source.slice(cursor, end).replace(/\r$/, "");
+    const line = rawLine.trim();
     if (line === "---" || line === "...") {
-      return { end: lineEnd === -1 ? end : lineEnd + 1 };
+      return { end: lineEnd === -1 ? end : lineEnd + 1, marp };
+    }
+    if (/^marp\s*:\s*(true|"true"|'true')\s*$/i.test(line)) {
+      marp = true;
     }
     if (lineEnd === -1) {
       break;
