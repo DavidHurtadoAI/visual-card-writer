@@ -106,7 +106,7 @@ Open a Markdown note and run **Visual Card Writer: Open current note in card edi
 
 ### Reorder cards and branches
 
-Drag a card over another card and follow the highlighted drop indicator:
+Drag a card over another card and follow the highlighted drop indicator. The source card and its visible descendants stay dimmed in place while a compact floating preview follows the pointer, so both the moving branch and its origin remain clear:
 
 - Drop **before** or **after** to reorder cards at that position.
 - Drop on the **child** target to place the card under a new parent.
