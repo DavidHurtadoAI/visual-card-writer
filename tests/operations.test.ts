@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { insertCard, insertMissingParent, promoteCardBranch } from "../src/operations";
+import { insertCard, insertMissingParent, moveCard, promoteCardBranch } from "../src/operations";
 import { parseCardDocument } from "../src/parser";
 
 describe("card insertion operations", () => {
@@ -86,5 +86,30 @@ describe("skipped heading repairs", () => {
       title: "Untitled"
     });
     expect(result.previousToNextCardIds.get("card-1")).toBe("card-2");
+  });
+});
+describe("card move operations", () => {
+  it("moves a heading branch below another card and rewrites heading levels", () => {
+    const source = "# Root\n\n## First\n\n### Detail\n\n## Second\n";
+    const before = parseCardDocument(source);
+    const result = moveCard(source, before, "card-1", "card-3", "child");
+
+    expect(result.text).toBe("# Root\n\n## Second\n\n### First\n\n#### Detail\n");
+    expect(result.document.issues).toEqual([]);
+    expect(result.document.cards.find((card) => card.id === result.movedCardId)).toMatchObject({
+      level: 3,
+      title: "First",
+      parentId: "card-1"
+    });
+  });
+
+  it("reorders MARP slides without nesting them", () => {
+    const source = "---\nmarp: true\n---\n# One\n\n---\n# Two\n\n---\n# Three\n";
+    const before = parseCardDocument(source);
+    const result = moveCard(source, before, "card-2", "card-0", "before");
+
+    expect(result.document.structure).toBe("slides");
+    expect(result.document.cards.map((card) => card.title)).toEqual(["Three", "One", "Two"]);
+    expect(() => moveCard(source, before, "card-2", "card-0", "child")).toThrow("Slides cannot be nested");
   });
 });

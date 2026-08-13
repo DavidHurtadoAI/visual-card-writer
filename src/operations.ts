@@ -2,6 +2,7 @@ import { hasBlockingIssues, parseCardDocument } from "./parser";
 import type { CardDocument, CardNode } from "./types";
 
 export type CardInsertionKind = "child" | "sibling";
+export type CardMovePlacement = "before" | "after" | "child";
 
 export interface CardInsertionResult {
   text: string;
@@ -9,6 +10,13 @@ export interface CardInsertionResult {
   createdCardId: string;
   insertionOffset: number;
   insertedLength: number;
+  previousToNextCardIds: ReadonlyMap<string, string>;
+}
+
+export interface CardMoveResult {
+  text: string;
+  document: CardDocument;
+  movedCardId: string;
   previousToNextCardIds: ReadonlyMap<string, string>;
 }
 
@@ -29,6 +37,9 @@ export function insertCard(
 ): CardInsertionResult {
   if (hasBlockingIssues(document)) {
     throw new Error("Cards cannot be created while the ATX hierarchy has structural errors.");
+  }
+  if (document.structure === "slides") {
+    throw new Error("Cards cannot be created in slide mode yet.");
   }
   const targetIndex = document.cards.findIndex((card) => card.id === targetCardId);
   if (targetIndex === -1) {
@@ -70,6 +81,93 @@ export function insertCard(
   };
 }
 
+export function moveCard(
+  source: string,
+  document: CardDocument,
+  sourceCardId: string,
+  targetCardId: string,
+  placement: CardMovePlacement
+): CardMoveResult {
+  if (hasBlockingIssues(document)) {
+    throw new Error("Cards cannot be moved while the ATX hierarchy has structural errors.");
+  }
+  if (document.structure === "slides") {
+    return moveSlide(source, document, sourceCardId, targetCardId, placement);
+  }
+  const sourceIndex = document.cards.findIndex((card) => card.id === sourceCardId);
+  const targetIndex = document.cards.findIndex((card) => card.id === targetCardId);
+  if (sourceIndex === -1) {
+    throw new Error(`Card not found: ${sourceCardId}.`);
+  }
+  if (targetIndex === -1) {
+    throw new Error(`Card not found: ${targetCardId}.`);
+  }
+  if (sourceCardId === targetCardId) {
+    throw new Error("A card cannot be moved onto itself.");
+  }
+
+  const sourceSubtreeEndIndex = subtreeEndIndex(document.cards, sourceIndex);
+  if (targetIndex > sourceIndex && targetIndex < sourceSubtreeEndIndex) {
+    throw new Error("A card cannot be moved into its own subtree.");
+  }
+
+  const sourceCard = document.cards[sourceIndex];
+  const targetCard = document.cards[targetIndex];
+  const nextSourceLevel = placement === "child" ? targetCard.level + 1 : targetCard.level;
+  const levelDelta = nextSourceLevel - sourceCard.level;
+  const movedCards = document.cards.slice(sourceIndex, sourceSubtreeEndIndex);
+  for (const card of movedCards) {
+    const nextLevel = card.level + levelDelta;
+    if (nextLevel < 1 || nextLevel > 6) {
+      throw new Error("Moving the card would create a heading level outside H1-H6.");
+    }
+  }
+
+  const insertionOffset = placement === "before"
+    ? targetCard.range.start
+    : subtreeEndOffset(source, document.cards, targetIndex);
+  const movedStart = sourceCard.range.start;
+  const movedEnd = subtreeEndOffset(source, document.cards, sourceIndex);
+  const movedLength = movedEnd - movedStart;
+  const textWithoutMoved = source.slice(0, movedStart) + source.slice(movedEnd);
+  const insertionOffsetAfterRemoval = insertionOffset > movedStart
+    ? insertionOffset - movedLength
+    : insertionOffset;
+  const eol = source.includes("\r\n") ? "\r\n" : "\n";
+  const adjustedMovedMarkdown = rewriteMovedSubtreeLevels(
+    source.slice(movedStart, movedEnd),
+    movedCards,
+    movedStart,
+    levelDelta
+  );
+  const before = textWithoutMoved.slice(0, insertionOffsetAfterRemoval);
+  const after = textWithoutMoved.slice(insertionOffsetAfterRemoval);
+  const movedMarkdown = after.length === 0
+    ? trimTrailingBlankLines(adjustedMovedMarkdown, eol)
+    : adjustedMovedMarkdown;
+  const movedText =
+    before +
+    blankLineBefore(before, eol) +
+    movedMarkdown +
+    blankLineAfter(movedMarkdown, after, eol) +
+    after;
+  const text = source.endsWith(eol + eol) ? movedText : trimTrailingBlankLines(movedText, eol);
+  const nextDocument = parseCardDocument(text);
+  if (hasBlockingIssues(nextDocument)) {
+    throw new Error(`Moving the card would invalidate the ATX hierarchy: ${nextDocument.issues[0].message}`);
+  }
+
+  const expectedCards = expectedCardsAfterMove(document.cards, sourceIndex, sourceSubtreeEndIndex, targetCardId, placement);
+  const previousToNextCardIds = mapMovedCardIds(expectedCards, nextDocument.cards, new Map(
+    movedCards.map((card) => [card.id, card.level + levelDelta])
+  ));
+  const movedCardId = previousToNextCardIds.get(sourceCardId);
+  if (!movedCardId) {
+    throw new Error("The moved card could not be reconciled with the card hierarchy.");
+  }
+
+  return { text, document: nextDocument, movedCardId, previousToNextCardIds };
+}
 export function promoteCardBranch(
   source: string,
   document: CardDocument,
@@ -182,6 +280,148 @@ function subtreeEndIndex(cards: CardNode[], targetIndex: number): number {
   return cards.length;
 }
 
+function moveSlide(
+  source: string,
+  document: CardDocument,
+  sourceCardId: string,
+  targetCardId: string,
+  placement: CardMovePlacement
+): CardMoveResult {
+  if (placement === "child") {
+    throw new Error("Slides cannot be nested as child cards.");
+  }
+  const sourceIndex = document.cards.findIndex((card) => card.id === sourceCardId);
+  const targetIndex = document.cards.findIndex((card) => card.id === targetCardId);
+  if (sourceIndex === -1) {
+    throw new Error(`Card not found: ${sourceCardId}.`);
+  }
+  if (targetIndex === -1) {
+    throw new Error(`Card not found: ${targetCardId}.`);
+  }
+  if (sourceCardId === targetCardId) {
+    throw new Error("A card cannot be moved onto itself.");
+  }
+
+  const moved = document.cards[sourceIndex];
+  const remaining = document.cards.filter((card) => card.id !== sourceCardId);
+  const targetIndexAfterRemoval = remaining.findIndex((card) => card.id === targetCardId);
+  if (targetIndexAfterRemoval === -1) {
+    throw new Error("The drop target could not be reconciled after removing the moved slide.");
+  }
+  const insertionIndex = placement === "before" ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1;
+  const ordered = [
+    ...remaining.slice(0, insertionIndex),
+    moved,
+    ...remaining.slice(insertionIndex)
+  ];
+  const eol = source.includes("\r\n") ? "\r\n" : "\n";
+  const prefix = document.cards[0] ? source.slice(0, document.cards[0].range.start) : "";
+  const slideSeparator = `${eol}---${eol}`;
+  const text =
+    prefix +
+    ordered
+      .map((card) => trimTrailingBlankLines(card.markdown, eol))
+      .join(slideSeparator);
+  const nextDocument = parseCardDocument(text);
+  if (nextDocument.structure !== "slides" || nextDocument.cards.length !== ordered.length) {
+    throw new Error("Moved slides could not be reconciled after parsing the new deck.");
+  }
+  const previousToNextCardIds = new Map<string, string>();
+  ordered.forEach((previous, index) => {
+    const next = nextDocument.cards[index];
+    if (!next) {
+      throw new Error(`Existing slide could not be reconciled after moving: ${previous.id}.`);
+    }
+    previousToNextCardIds.set(previous.id, next.id);
+  });
+  const movedCardId = previousToNextCardIds.get(sourceCardId);
+  if (!movedCardId) {
+    throw new Error("The moved slide could not be reconciled with the deck.");
+  }
+  return { text, document: nextDocument, movedCardId, previousToNextCardIds };
+}
+
+function blankLineAfter(fragment: string, after: string, eol: string): string {
+  if (after.length === 0 || fragment.endsWith(eol + eol)) {
+    return "";
+  }
+  return fragment.endsWith("\n") ? eol : eol + eol;
+}
+
+function trimTrailingBlankLines(fragment: string, eol: string): string {
+  const newline = eol === "\r\n" ? "\\r\\n" : "\\n";
+  return fragment.replace(new RegExp(`(?:${newline}){2,}$`), eol);
+}
+
+function rewriteMovedSubtreeLevels(
+  fragment: string,
+  movedCards: CardNode[],
+  movedStart: number,
+  levelDelta: number
+): string {
+  if (levelDelta === 0) {
+    return fragment;
+  }
+  let result = "";
+  let cursor = 0;
+  for (const card of movedCards) {
+    const relativeStart = card.range.start - movedStart;
+    const match = /^( {0,3})(#{1,6})/.exec(fragment.slice(relativeStart));
+    if (!match) {
+      throw new Error(`Could not rewrite the heading level for ${card.id}.`);
+    }
+    const marksStart = relativeStart + match[1].length;
+    const marksEnd = marksStart + match[2].length;
+    result += fragment.slice(cursor, marksStart);
+    result += "#".repeat(card.level + levelDelta);
+    cursor = marksEnd;
+  }
+  return result + fragment.slice(cursor);
+}
+
+function expectedCardsAfterMove(
+  cards: CardNode[],
+  sourceIndex: number,
+  sourceSubtreeEndIndex: number,
+  targetCardId: string,
+  placement: CardMovePlacement
+): CardNode[] {
+  const moved = cards.slice(sourceIndex, sourceSubtreeEndIndex);
+  const remaining = cards.filter((_, index) => index < sourceIndex || index >= sourceSubtreeEndIndex);
+  const targetIndex = remaining.findIndex((card) => card.id === targetCardId);
+  if (targetIndex === -1) {
+    throw new Error("The drop target could not be reconciled after removing the moved card.");
+  }
+  let insertionIndex = targetIndex;
+  if (placement !== "before") {
+    insertionIndex = subtreeEndIndex(remaining, targetIndex);
+  }
+  return [
+    ...remaining.slice(0, insertionIndex),
+    ...moved,
+    ...remaining.slice(insertionIndex)
+  ];
+}
+
+function mapMovedCardIds(
+  expectedCards: CardNode[],
+  nextCards: CardNode[],
+  movedLevels: ReadonlyMap<string, number>
+): ReadonlyMap<string, string> {
+  if (expectedCards.length !== nextCards.length) {
+    throw new Error("Moved cards could not be reconciled after parsing the new hierarchy.");
+  }
+  const result = new Map<string, string>();
+  expectedCards.forEach((previous, index) => {
+    const next = nextCards[index];
+    const expectedLevel = movedLevels.get(previous.id) ?? previous.level;
+    if (next.level !== expectedLevel || next.title !== previous.title) {
+      throw new Error(`Existing card could not be reconciled after moving: ${previous.id}.`);
+    }
+    result.set(previous.id, next.id);
+  });
+  return result;
+}
 function replaceHeadingLevel(source: string, card: CardNode, level: number): string {
   const heading = source.slice(card.range.start, card.range.headingEnd);
   const replacement = heading.replace(/^( {0,3})#{1,6}(?=[\t ]|$)/, `$1${"#".repeat(level)}`);

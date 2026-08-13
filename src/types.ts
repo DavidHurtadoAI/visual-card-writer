@@ -7,6 +7,7 @@ export interface CardRange {
 
 export interface CardNode {
   id: string;
+  kind: "heading" | "slide";
   level: number;
   depth: number;
   title: string;
@@ -38,6 +39,7 @@ export type ParseIssue =
     };
 
 export interface CardDocument {
+  structure: "headings" | "slides";
   cards: CardNode[];
   roots: string[];
   issues: ParseIssue[];
@@ -66,4 +68,5 @@ export interface ViewDiagnostics {
   collapsedCards: number;
   zoomLevel: number;
   layoutOrientation: LayoutOrientation;
+  focusDimmingEnabled: boolean;
 }

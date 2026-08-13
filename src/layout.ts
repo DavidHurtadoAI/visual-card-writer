@@ -1,6 +1,7 @@
 import type { CardNode, LayoutOrientation } from "./types";
 
 export type CardEmphasis = "selected" | "active-path" | "next-choice" | "deemphasized";
+export type DropPlacement = "before" | "after" | "child";
 
 export interface TreeLayout {
   tops: Map<string, number>;
@@ -186,6 +187,37 @@ export function computeBranchAxisLayout(
     ])
   );
   return computeTreeLayout(cards, roots, branchSizes, gap);
+}
+
+export function getDropPlacementForPoint(
+  card: CardSurfaceRect,
+  pointer: ConnectorPoint,
+  orientation: LayoutOrientation,
+  allowChildPlacement: boolean
+): DropPlacement {
+  const relativeX = pointer.x - card.left;
+  const relativeY = pointer.y - card.top;
+  if (!allowChildPlacement) {
+    return orientation === "horizontal"
+      ? relativeY < card.height / 2 ? "before" : "after"
+      : relativeX < card.width / 2 ? "before" : "after";
+  }
+  if (orientation === "horizontal") {
+    if (relativeY < card.height * 0.26) {
+      return "before";
+    }
+    if (relativeY > card.height * 0.74) {
+      return "after";
+    }
+    return relativeX > card.width * 0.58 ? "child" : "after";
+  }
+  if (relativeX < card.width * 0.26) {
+    return "before";
+  }
+  if (relativeX > card.width * 0.74) {
+    return "after";
+  }
+  return relativeY > card.height * 0.58 ? "child" : "after";
 }
 
 export function getLayoutNavigationKeys(orientation: LayoutOrientation): LayoutNavigationKeys {
