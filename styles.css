@@ -634,6 +634,10 @@
   will-change: transform;
 }
 
+.visual-card-writer-drag-preview.is-positioning {
+  visibility: hidden;
+}
+
 .visual-card-writer-drag-preview .visual-card-writer-card-body {
   max-height: 168px;
   overflow: hidden;

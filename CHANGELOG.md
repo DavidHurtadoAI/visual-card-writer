@@ -2,6 +2,10 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.10
+
+- Replace the drag preview's temporary static visibility assignment with a CSS state class, satisfying the Obsidian Community `obsidianmd/no-static-styles-assignment` check without changing the visual behavior.
+
 ## 0.1.9
 
 - Add clearer drag-and-drop feedback: the source branch stays visibly dimmed while a compact floating preview follows the pointer and identifies whether a card, branch, or slide is moving.
