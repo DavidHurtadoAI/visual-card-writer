@@ -88,6 +88,11 @@
   background: var(--background-modifier-hover);
 }
 
+.visual-card-writer-toolbar-button.is-active {
+  color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-secondary));
+}
+
 .visual-card-writer-breadcrumb {
   display: flex;
   align-items: center;
@@ -553,9 +558,25 @@
   opacity: 1;
 }
 
-.visual-card-writer-card.is-active-path,
-.visual-card-writer-card.is-available {
-  opacity: 1;
+.visual-card-writer-view.is-focus-dimming-enabled .visual-card-writer-card.is-active-path {
+  opacity: 0.72;
+}
+
+.visual-card-writer-view.is-focus-dimming-enabled .visual-card-writer-card.is-next-choice {
+  opacity: 0.86;
+}
+
+.visual-card-writer-view.is-focus-dimming-enabled .visual-card-writer-card.is-deemphasized {
+  border-color: color-mix(in srgb, var(--background-modifier-border) 55%, transparent);
+  box-shadow: none;
+  filter: saturate(0.45);
+  opacity: 0.3;
+}
+
+.visual-card-writer-view.is-focus-dimming-enabled .visual-card-writer-card.is-deemphasized:hover,
+.visual-card-writer-view.is-focus-dimming-enabled .visual-card-writer-card.is-deemphasized:focus-visible {
+  filter: saturate(0.8);
+  opacity: 0.72;
 }
 
 .visual-card-writer-view.is-dragging-card .visual-card-writer-card {

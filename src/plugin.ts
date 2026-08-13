@@ -4,9 +4,23 @@ import { CARD_VIEW_TYPE, VisualCardWriterView } from "./view";
 
 export default class VisualCardWriterPlugin extends Plugin {
   private readonly sessions = new DocumentSessionRegistry();
+  private settingsData: Record<string, unknown> = {};
+  private focusDimmingEnabled = true;
 
   async onload(): Promise<void> {
-    this.registerView(CARD_VIEW_TYPE, (leaf) => new VisualCardWriterView(leaf, this.sessions));
+    const savedData: unknown = await this.loadData();
+    if (savedData && typeof savedData === "object" && !Array.isArray(savedData)) {
+      this.settingsData = { ...(savedData as Record<string, unknown>) };
+    }
+    this.focusDimmingEnabled = this.settingsData.focusDimmingEnabled !== false;
+
+    this.registerView(
+      CARD_VIEW_TYPE,
+      (leaf) => new VisualCardWriterView(leaf, this.sessions, {
+        get: () => this.focusDimmingEnabled,
+        set: (enabled) => this.setFocusDimmingEnabled(enabled)
+      })
+    );
 
     this.addCommand({
       id: "open-card-editor",
@@ -66,6 +80,18 @@ export default class VisualCardWriterPlugin extends Plugin {
         const view = this.app.workspace.getActiveViewOfType(VisualCardWriterView);
         if (view && !checking) {
           void view.toggleLayoutOrientation();
+        }
+        return view != null;
+      }
+    });
+
+    this.addCommand({
+      id: "toggle-focus-dimming",
+      name: "Toggle dimming of cards outside the selected branch",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(VisualCardWriterView);
+        if (view && !checking) {
+          void view.toggleFocusDimming();
         }
         return view != null;
       }
@@ -196,5 +222,16 @@ export default class VisualCardWriterPlugin extends Plugin {
       throw new Error(`Markdown file not found: ${path}`);
     }
     return file;
+  }
+
+  private async setFocusDimmingEnabled(enabled: boolean): Promise<void> {
+    this.focusDimmingEnabled = enabled;
+    this.settingsData.focusDimmingEnabled = enabled;
+    for (const leaf of this.app.workspace.getLeavesOfType(CARD_VIEW_TYPE)) {
+      if (leaf.view instanceof VisualCardWriterView) {
+        leaf.view.setFocusDimmingEnabled(enabled);
+      }
+    }
+    await this.saveData(this.settingsData);
   }
 }

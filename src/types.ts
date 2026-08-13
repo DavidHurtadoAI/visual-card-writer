@@ -68,4 +68,5 @@ export interface ViewDiagnostics {
   collapsedCards: number;
   zoomLevel: number;
   layoutOrientation: LayoutOrientation;
+  focusDimmingEnabled: boolean;
 }

@@ -89,10 +89,13 @@ describe("getCardEmphasis", () => {
     expect(getCardEmphasis(document.cards[0], "card-1", activePath)).toBe("active-path");
   });
 
-  it("keeps visible cards available instead of dimming inactive branches", () => {
-    expect(getCardEmphasis(document.cards[2], "card-1", activePath)).toBe("available");
-    expect(getCardEmphasis(document.cards[3], "card-1", activePath)).toBe("available");
-    expect(getCardEmphasis(document.cards[5], "card-1", activePath)).toBe("available");
+  it("keeps children of the selected card available as the next choice", () => {
+    expect(getCardEmphasis(document.cards[2], "card-1", activePath)).toBe("next-choice");
+  });
+
+  it("deemphasizes cards outside the selected branch", () => {
+    expect(getCardEmphasis(document.cards[3], "card-1", activePath)).toBe("deemphasized");
+    expect(getCardEmphasis(document.cards[5], "card-1", activePath)).toBe("deemphasized");
   });
 });
 

@@ -1,6 +1,6 @@
 import type { CardNode, LayoutOrientation } from "./types";
 
-export type CardEmphasis = "selected" | "active-path" | "available";
+export type CardEmphasis = "selected" | "active-path" | "next-choice" | "deemphasized";
 export type DropPlacement = "before" | "after" | "child";
 
 export interface TreeLayout {
@@ -120,7 +120,10 @@ export function getCardEmphasis(
   if (activePathIds.has(card.id)) {
     return "active-path";
   }
-  return "available";
+  if (card.parentId === selectedCardId) {
+    return "next-choice";
+  }
+  return "deemphasized";
 }
 
 export function computeTreeLayout(

@@ -64,6 +64,11 @@ import type { CardDocument, CardNode, LayoutOrientation, ParseIssue, ViewDiagnos
 
 export const CARD_VIEW_TYPE = "visual-card-writer-view";
 
+export interface FocusDimmingController {
+  get(): boolean;
+  set(enabled: boolean): Promise<void>;
+}
+
 interface CardTransitionItem {
   id: string;
   rect: DOMRect;
@@ -131,9 +136,16 @@ export class VisualCardWriterView extends TextFileView {
   private dragWheelViewport: HTMLElement | null = null;
   private dragWheelListener: ((event: WheelEvent) => void) | null = null;
   private suppressNextCardClick = false;
+  private focusDimmingEnabled = true;
+  private focusDimmingButton: HTMLButtonElement | null = null;
 
-  constructor(leaf: WorkspaceLeaf, private readonly sessions: DocumentSessionRegistry) {
+  constructor(
+    leaf: WorkspaceLeaf,
+    private readonly sessions: DocumentSessionRegistry,
+    private readonly focusDimming: FocusDimmingController
+  ) {
     super(leaf);
+    this.focusDimmingEnabled = focusDimming.get();
   }
 
   getViewType(): string {
@@ -191,6 +203,7 @@ export class VisualCardWriterView extends TextFileView {
     this.renderComponent = null;
     this.stopCardLayout();
     this.contentEl.empty();
+    this.focusDimmingButton = null;
     this.parsed = { structure: "headings", cards: [], roots: [], issues: [], prologue: "" };
     this.selectedCardId = null;
     this.collapsedCardIds.clear();
@@ -205,6 +218,7 @@ export class VisualCardWriterView extends TextFileView {
   async onOpen(): Promise<void> {
     this.containerEl.addClass("visual-card-writer-view");
     this.applyLayoutOrientationClass();
+    this.setFocusDimmingEnabled(this.focusDimming.get());
     this.registerDomEvent(this.contentEl, "click", (event) => this.handleViewClick(event));
     this.addAction("file-text", "Switch back to Markdown editor", () => {
       void this.switchToMarkdown();
@@ -214,6 +228,16 @@ export class VisualCardWriterView extends TextFileView {
 
   async toggleLayoutOrientation(): Promise<void> {
     await this.setLayoutOrientation(this.layoutOrientation === "horizontal" ? "vertical" : "horizontal");
+  }
+
+  async toggleFocusDimming(): Promise<void> {
+    await this.focusDimming.set(!this.focusDimmingEnabled);
+  }
+
+  setFocusDimmingEnabled(enabled: boolean): void {
+    this.focusDimmingEnabled = enabled;
+    this.containerEl.toggleClass("is-focus-dimming-enabled", enabled);
+    this.updateFocusDimmingButton();
   }
 
   async setLayoutOrientation(orientation: LayoutOrientation): Promise<void> {
@@ -475,7 +499,8 @@ export class VisualCardWriterView extends TextFileView {
       visibleCards: getVisibleCards(this.parsed.cards, this.collapsedCardIds).length,
       collapsedCards: this.collapsedCardIds.size,
       zoomLevel: this.zoomLevel,
-      layoutOrientation: this.layoutOrientation
+      layoutOrientation: this.layoutOrientation,
+      focusDimmingEnabled: this.focusDimmingEnabled
     };
   }
 
@@ -501,6 +526,7 @@ export class VisualCardWriterView extends TextFileView {
     const title = toolbar.createDiv({ cls: "visual-card-writer-title" });
     title.setText(this.file?.basename ?? "Visual Card Writer");
     this.createOrientationToggle(toolbar);
+    this.createFocusDimmingToggle(toolbar);
     const zoomButton = toolbar.createEl("button", {
       cls: "visual-card-writer-zoom-indicator",
       text: `${Math.round(this.zoomLevel * 100)}%`,
@@ -2474,6 +2500,34 @@ export class VisualCardWriterView extends TextFileView {
       event.stopPropagation();
       void this.toggleLayoutOrientation();
     });
+  }
+
+  private createFocusDimmingToggle(parent: HTMLElement): void {
+    const button = parent.createEl("button", {
+      cls: ["visual-card-writer-toolbar-button", "clickable-icon"]
+    });
+    this.focusDimmingButton = button;
+    this.updateFocusDimmingButton();
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.toggleFocusDimming();
+    });
+  }
+
+  private updateFocusDimmingButton(): void {
+    const button = this.focusDimmingButton;
+    if (!button) {
+      return;
+    }
+    const enabled = this.focusDimmingEnabled;
+    const label = enabled ? "Disable branch focus" : "Enable branch focus";
+    button.empty();
+    button.toggleClass("is-active", enabled);
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", String(enabled));
+    button.setAttribute("title", enabled ? "Branch focus on - Dim unrelated cards" : "Branch focus off - Show all cards equally");
+    setIcon(button, enabled ? "focus" : "eye");
   }
 
   private renderChildConnectors(
