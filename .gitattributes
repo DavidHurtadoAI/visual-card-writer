@@ -1,0 +1,32 @@
+# Finales de linea: LF dentro del repositorio, siempre.
+#
+# "text=auto" deja que Git detecte que ficheros son texto.
+# "eol=lf" fuerza LF tambien en el working tree, de modo que da igual
+# la configuracion de core.autocrlf de cada maquina o cliente: el disco
+# y el repositorio coinciden siempre y los diffs dejan de ensuciarse.
+* text=auto eol=lf
+
+# Excepciones: scripts que Windows necesita con CRLF para ejecutarse bien.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binarios: Git no debe inspeccionarlos ni convertirlos nunca.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.svg   text eol=lf
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.pdf   binary
+*.zip   binary
+
+# Lockfile: generado, LF, y colapsado en los diffs de GitHub.
+pnpm-lock.yaml text eol=lf linguist-generated=true
+
+# Artefacto de build del plugin (por si alguna vez se versiona).
+main.js text eol=lf linguist-generated=true
