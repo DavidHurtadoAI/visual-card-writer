@@ -2,6 +2,11 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.11
+
+- Add a Visual Card Writer icon to Obsidian's left ribbon for opening the current Markdown note directly in the card editor.
+- Add the official Obsidian plugin linter to the local and continuous-integration validation pipeline.
+
 ## 0.1.10
 
 - Replace the drag preview's temporary static visibility assignment with a CSS state class, satisfying the Obsidian Community `obsidianmd/no-static-styles-assignment` check without changing the visual behavior.

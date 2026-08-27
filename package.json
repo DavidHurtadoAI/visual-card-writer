@@ -1,6 +1,6 @@
 {
   "name": "obsidian-visual-card-writer",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "private": true,
   "description": "Card-based Markdown editor for Obsidian.",
   "author": "David Hurtado",
@@ -30,7 +30,8 @@
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit && node esbuild.config.mjs production",
     "test": "vitest run",
-    "check": "vitest run && tsc --noEmit && node esbuild.config.mjs production",
+    "lint": "eslint . --max-warnings 0",
+    "check": "eslint . --max-warnings 0 && vitest run && tsc --noEmit && node esbuild.config.mjs production",
     "release:check": "node scripts/validate-release.mjs"
   },
   "dependencies": {
@@ -43,16 +44,16 @@
     "mdast-util-from-markdown": "^2.0.3"
   },
   "devDependencies": {
+    "@eslint/js": "9.39.4",
     "@rollup/rollup-win32-arm64-msvc": "4.62.4",
     "@types/node": "^24.3.0",
     "esbuild": "^0.25.12",
+    "eslint": "9.39.4",
+    "eslint-plugin-obsidianmd": "0.4.2",
+    "globals": "17.6.0",
     "obsidian": "^1.13.1",
     "typescript": "^5.9.3",
+    "typescript-eslint": "8.59.1",
     "vitest": "^3.2.7"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }
