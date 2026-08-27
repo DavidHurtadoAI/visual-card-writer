@@ -95,7 +95,7 @@ Visual Card Writer is listed in Obsidian's Community plugins directory. Open **S
 
 ## Usage
 
-Open a Markdown note and run **Visual Card Writer: Open current note in card editor** from the command palette.
+Open a Markdown note, then click the **Visual Card Writer** icon in the left ribbon or run **Visual Card Writer: Open current note in card editor** from the command palette.
 
 - Select a card to navigate its branch.
 - Click the pencil or double-click a card to edit it.

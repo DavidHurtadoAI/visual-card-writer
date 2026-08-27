@@ -22,6 +22,10 @@ export default class VisualCardWriterPlugin extends Plugin {
       })
     );
 
+    this.addRibbonIcon("layout-dashboard", "Open current note in Visual Card Writer", () => {
+      void this.openActiveFileInCardView();
+    });
+
     this.addCommand({
       id: "open-card-editor",
       name: "Open current note in card editor",
@@ -204,6 +208,15 @@ export default class VisualCardWriterPlugin extends Plugin {
       throw new Error("Obsidian did not create the Visual Card Writer view.");
     }
     return view;
+  }
+
+  private async openActiveFileInCardView(): Promise<void> {
+    const file = this.app.workspace.getActiveFile();
+    if (!(file instanceof TFile) || file.extension.toLowerCase() !== "md") {
+      new Notice("Open a Markdown note first.");
+      return;
+    }
+    await this.openFileInCardView(file);
   }
 
   private requireActiveView(): VisualCardWriterView {
