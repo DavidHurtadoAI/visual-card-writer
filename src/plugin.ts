@@ -22,7 +22,7 @@ export default class VisualCardWriterPlugin extends Plugin {
       })
     );
 
-    this.addRibbonIcon("layout-dashboard", "Open current note in Visual Card Writer", () => {
+    this.addRibbonIcon("gallery-horizontal-end", "Open current note in Visual Card Writer", () => {
       void this.openActiveFileInCardView();
     });
 

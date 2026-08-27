@@ -160,7 +160,7 @@ export class VisualCardWriterView extends TextFileView {
   }
 
   getIcon(): string {
-    return "layout-dashboard";
+    return "gallery-horizontal-end";
   }
 
   getViewData(): string {

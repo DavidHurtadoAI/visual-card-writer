@@ -2,6 +2,10 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.12
+
+- Give Visual Card Writer a distinct gallery-style icon in the left ribbon and view tab instead of reusing Canvas's dashboard icon.
+
 ## 0.1.11
 
 - Add a Visual Card Writer icon to Obsidian's left ribbon for opening the current Markdown note directly in the card editor.
