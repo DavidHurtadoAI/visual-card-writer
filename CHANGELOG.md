@@ -2,6 +2,13 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.1.13
+
+- Add settings to choose whether double-clicking a card uses the embedded editor or Obsidian's standard Markdown editor.
+- Open the standard editor in a new tab or to the right while keeping Visual Card Writer open, and reuse that editor for subsequent cards.
+- Navigate to the exact source line, including repeated heading titles and MARP slide starts.
+- Document the workflow with a screenshot of the settings in Obsidian.
+
 ## 0.1.12
 
 - Give Visual Card Writer a distinct gallery-style icon in the left ribbon and view tab instead of reusing Canvas's dashboard icon.

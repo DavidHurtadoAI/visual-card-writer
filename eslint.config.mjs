@@ -29,7 +29,7 @@ export default defineConfig(
       "obsidianmd/ui/sentence-case": [
         "warn",
         {
-          brands: ["Markdown", "Visual Card Writer"],
+          brands: ["Markdown", "Visual Card Writer", "Obsidian"],
           acronyms: ["ATX", "H6"]
         }
       ]
