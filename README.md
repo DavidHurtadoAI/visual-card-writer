@@ -20,6 +20,7 @@ _GIF showing the UI in action_
 - Expand or collapse individual branches, or reveal and fold the complete document from the toolbar.
 - Create child and sibling cards without leaving the visual editor.
 - Edit cards with an embedded CodeMirror 6 editor and essential Live Preview.
+- Optionally double-click a card to open its heading in Obsidian's standard editor, in a new tab or a pane to the right while keeping the card view open.
 - Resize complete columns horizontally and individual cards vertically.
 - Pan, scroll in both directions, and zoom without losing the current visual context, including while dragging a card.
 - Preserve standard Markdown without proprietary comments or metadata.
@@ -98,11 +99,24 @@ Visual Card Writer is listed in Obsidian's Community plugins directory. Open **S
 Open a Markdown note, then click the **Visual Card Writer** icon in the left ribbon or run **Visual Card Writer: Open current note in card editor** from the command palette.
 
 - Select a card to navigate its branch.
-- Click the pencil or double-click a card to edit it.
+- Click the pencil to edit inside a card. Double-click to use your configured editor (the embedded editor by default).
 - Click outside the card to save and leave editing.
 - Use the `+` button to create a child card where the document structure allows it.
 - Drag the right edge to resize every card at that hierarchy level.
 - Drag the bottom edge to resize one card vertically.
+
+### Double-click editing preferences
+
+In **Settings → Visual Card Writer**, choose the **Card double-click action**:
+
+- **Edit inside the card** (default): use the existing embedded editor.
+- **Open in Obsidian editor**: open the note at the card's heading in Obsidian's standard editor, keeping the card view open.
+
+For the Obsidian editor, choose **New tab** or **Open to the right** under **Obsidian editor location**. The latter keeps the cards and note visible side by side. Subsequent double-clicks reuse the destination editor. Navigation uses the heading's line, so repeated heading titles work too. For MARP cards, navigation goes to the start of the slide. The pencil button and keyboard editing shortcuts continue to use the embedded editor.
+
+<img src="./obsidian-editor-settings.png" width="618" alt="Visual Card Writer settings: Card double-click action set to Open in Obsidian editor and Obsidian editor location set to Open to the right">
+
+To use this workflow, select **Open in Obsidian editor**, then **Open to the right**, and double-click any card. Your note opens in editing mode at that card's section without closing Visual Card Writer.
 
 ### Reorder cards and branches
 

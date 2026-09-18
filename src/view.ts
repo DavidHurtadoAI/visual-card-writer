@@ -61,6 +61,8 @@ import type { CardInsertionKind, CardInsertionResult, CardMovePlacement, Heading
 import { essentialLivePreview } from "./live-preview";
 import { DocumentSession, DocumentSessionRegistry } from "./session";
 import type { SessionSnapshot } from "./session";
+import { openCardInMarkdown } from "./open-card";
+import type { CardDoubleClickAction, MarkdownOpenLocation } from "./settings";
 import type { CardDocument, CardNode, LayoutOrientation, ParseIssue, ViewDiagnostics } from "./types";
 
 export const CARD_VIEW_TYPE = "visual-card-writer-view";
@@ -141,11 +143,15 @@ export class VisualCardWriterView extends TextFileView {
   private suppressNextCardClick = false;
   private focusDimmingEnabled = true;
   private focusDimmingButton: HTMLButtonElement | null = null;
+  private markdownLeaf?: WorkspaceLeaf;
+  private markdownLeafLocation?: MarkdownOpenLocation;
+  private openingMarkdown = false;
 
   constructor(
     leaf: WorkspaceLeaf,
     private readonly sessions: DocumentSessionRegistry,
-    private readonly focusDimming: FocusDimmingController
+    private readonly focusDimming: FocusDimmingController,
+    private readonly getEditingPreferences: () => { action: CardDoubleClickAction; location: MarkdownOpenLocation }
   ) {
     super(leaf);
     this.focusDimmingEnabled = focusDimming.get();
@@ -279,6 +285,34 @@ export class VisualCardWriterView extends TextFileView {
       state: { file: this.file.path, mode: "source" },
       active: true
     });
+  }
+
+  private async onCardDoubleClick(cardId: string): Promise<void> {
+    const preferences = this.getEditingPreferences();
+    if (preferences.action === "embedded") {
+      await this.startEditing(cardId);
+      return;
+    }
+    if (!this.file || this.openingMarkdown) return;
+    this.openingMarkdown = true;
+    try {
+      const file = this.file;
+      const original = this.cardById(cardId);
+      await this.finishEditing(true);
+      if (this.editor || this.file !== file || !original) return;
+      const card = reconcileCard(original, this.parsed);
+      if (!card) return;
+      this.markdownLeaf = await openCardInMarkdown(
+        this.app.workspace, this.leaf, file, card.range.line, preferences.location,
+        this.markdownLeafLocation === preferences.location ? this.markdownLeaf : undefined
+      );
+      this.markdownLeafLocation = preferences.location;
+    } catch (error) {
+      console.error("Visual Card Writer could not open the Obsidian editor", error);
+      new Notice("Could not open the card in Obsidian's editor.");
+    } finally {
+      this.openingMarkdown = false;
+    }
   }
 
   async startEditing(cardId = this.selectedCardId, selectHeadingTitle = false): Promise<void> {
@@ -765,7 +799,7 @@ export class VisualCardWriterView extends TextFileView {
           if (this.isInsideActiveEditor(event)) {
             return;
           }
-          void this.startEditing(card.id);
+          void this.onCardDoubleClick(card.id);
         });
         cardElement.addEventListener("keydown", (event) => this.handleCardKeydown(event, card, ids));
         try {

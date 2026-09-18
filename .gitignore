@@ -11,5 +11,6 @@ Thumbs.db
 # Local development evidence and historical captures
 *.png
 !skipped-heading-repair.png
+!obsidian-editor-settings.png
 !vertical-card-layout.png
 SPIKE_REPORT.md

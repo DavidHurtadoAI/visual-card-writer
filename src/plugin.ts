@@ -1,11 +1,31 @@
 import { Notice, Plugin, TFile, normalizePath } from "obsidian";
 import { DocumentSessionRegistry } from "./session";
 import { CARD_VIEW_TYPE, VisualCardWriterView } from "./view";
+import { VisualCardWriterSettingTab } from "./settings";
+import type { CardDoubleClickAction, MarkdownOpenLocation } from "./settings";
 
 export default class VisualCardWriterPlugin extends Plugin {
   private readonly sessions = new DocumentSessionRegistry();
   private settingsData: Record<string, unknown> = {};
   private focusDimmingEnabled = true;
+
+  get cardDoubleClickAction(): CardDoubleClickAction {
+    return this.settingsData.cardDoubleClickAction === "obsidian" ? "obsidian" : "embedded";
+  }
+
+  get markdownOpenLocation(): MarkdownOpenLocation {
+    return this.settingsData.markdownOpenLocation === "right" ? "right" : "tab";
+  }
+
+  async setCardDoubleClickAction(action: CardDoubleClickAction): Promise<void> {
+    this.settingsData.cardDoubleClickAction = action;
+    await this.saveData(this.settingsData);
+  }
+
+  async setMarkdownOpenLocation(location: MarkdownOpenLocation): Promise<void> {
+    this.settingsData.markdownOpenLocation = location;
+    await this.saveData(this.settingsData);
+  }
 
   async onload(): Promise<void> {
     const savedData: unknown = await this.loadData();
@@ -13,13 +33,14 @@ export default class VisualCardWriterPlugin extends Plugin {
       this.settingsData = { ...(savedData as Record<string, unknown>) };
     }
     this.focusDimmingEnabled = this.settingsData.focusDimmingEnabled !== false;
+    this.addSettingTab(new VisualCardWriterSettingTab(this));
 
     this.registerView(
       CARD_VIEW_TYPE,
       (leaf) => new VisualCardWriterView(leaf, this.sessions, {
         get: () => this.focusDimmingEnabled,
         set: (enabled) => this.setFocusDimmingEnabled(enabled)
-      })
+      }, () => ({ action: this.cardDoubleClickAction, location: this.markdownOpenLocation }))
     );
 
     this.addRibbonIcon("gallery-horizontal-end", "Open current note in Visual Card Writer", () => {
