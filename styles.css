@@ -491,7 +491,6 @@
 }
 
 .visual-card-writer-card.is-editing .visual-card-writer-edit-button,
-.visual-card-writer-card.is-editing .visual-card-writer-collapse-toggle,
 .visual-card-writer-card.is-editing .visual-card-writer-add-child-button,
 .visual-card-writer-card.is-editing .visual-card-writer-heading-jump {
   display: none;

@@ -32,6 +32,10 @@ export default class VisualCardWriterPlugin extends Plugin {
     if (savedData && typeof savedData === "object" && !Array.isArray(savedData)) {
       this.settingsData = { ...(savedData as Record<string, unknown>) };
     }
+    if ("extremeMode" in this.settingsData) {
+      delete this.settingsData.extremeMode;
+      await this.saveData(this.settingsData);
+    }
     this.focusDimmingEnabled = this.settingsData.focusDimmingEnabled !== false;
     this.addSettingTab(new VisualCardWriterSettingTab(this));
 
