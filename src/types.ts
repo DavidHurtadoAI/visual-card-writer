@@ -7,7 +7,7 @@ export interface CardRange {
 
 export interface CardNode {
   id: string;
-  kind: "heading" | "slide";
+  kind: "heading" | "slide" | "paragraph";
   level: number;
   depth: number;
   title: string;

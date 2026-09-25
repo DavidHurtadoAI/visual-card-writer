@@ -2,6 +2,16 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.2.0
+
+- Add text block cards separated by completely empty source lines. Consecutive lines, including lists, tables and callouts, remain together.
+- Unify section and block disclosure in one arrow: reveal subheadings and two or more direct text blocks, or collapse back to the complete section card. Keep zero or one block inline.
+- Make card-body clicks select without expanding. Keep directional keyboard navigation and expand/collapse-all actions consistent with the unified arrow.
+- Update arrow availability after a 600 ms editing pause without rebuilding the active editor; recalculate block structure when editing finishes.
+- Restore heading drag and drop with blocks expanded, and add block reordering and transfer between sections while preserving block contents and indentation.
+- Fix repeated expand/collapse rendering and preserve list/callout content during real drag-and-drop operations.
+- Document the new behavior, source-format examples, editing controls, drop targets and current limits in the README.
+
 ## 0.1.13
 
 - Add settings to choose whether double-clicking a card uses the embedded editor or Obsidian's standard Markdown editor.
