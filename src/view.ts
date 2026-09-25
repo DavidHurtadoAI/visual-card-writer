@@ -633,9 +633,9 @@ export class VisualCardWriterView extends TextFileView {
     this.renderComponent = component;
     this.contentEl.empty();
 
-    const toolbar = this.contentEl.createDiv({ cls: "visual-card-writer-toolbar" });
-    const title = toolbar.createDiv({ cls: "visual-card-writer-title" });
-    title.setText(this.file?.basename ?? "Visual Card Writer");
+    const navigation = this.contentEl.createDiv({ cls: "visual-card-writer-navigation" });
+    navigation.createDiv({ cls: "visual-card-writer-breadcrumb" });
+    const toolbar = navigation.createDiv({ cls: "visual-card-writer-toolbar" });
     this.createOrientationToggle(toolbar);
     this.createFocusDimmingToggle(toolbar);
     const zoomButton = toolbar.createEl("button", {

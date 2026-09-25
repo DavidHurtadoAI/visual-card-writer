@@ -2,6 +2,11 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.2.1
+
+- Remove the duplicate document title from the card view toolbar.
+- Place the breadcrumb and view controls in one compact row, leaving more vertical space for cards.
+
 ## 0.2.0
 
 - Add text block cards separated by completely empty source lines. Consecutive lines, including lists, tables and callouts, remain together.

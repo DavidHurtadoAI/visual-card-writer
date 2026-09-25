@@ -24,6 +24,7 @@ _GIF showing the UI in action_
 
 ## Features
 
+- Keep navigation compact: the breadcrumb and view controls share one row, without repeating the document title above it.
 - Navigate a Markdown outline as aligned cards in a horizontal or vertical tree, with subtle orthogonal connectors between parents and their visible children.
 - Drag cards to reorder them, move complete branches, or change their depth. Visual Card Writer updates the underlying heading levels automatically.
 - Treat an explicit MARP document (`marp: true`) as a flat sequence of draggable slide cards while leaving ordinary Markdown thematic breaks untouched.
