@@ -912,6 +912,11 @@ export class VisualCardWriterView extends TextFileView {
   }
 
   private handleCardKeydown(event: KeyboardEvent, card: CardNode, siblings: string[]): void {
+    // Keys typed in the embedded editor bubble up to the card element. They belong to the
+    // editor (cursor movement, line breaks), so card navigation and creation must ignore them.
+    if (this.isInsideActiveEditor(event)) {
+      return;
+    }
     const mod = event.ctrlKey || event.metaKey;
     if (mod && !event.altKey && !event.shiftKey && event.key === "ArrowRight") {
       event.preventDefault();
