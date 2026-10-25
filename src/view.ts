@@ -299,7 +299,11 @@ export class VisualCardWriterView extends TextFileView {
     this.addAction("file-text", "Switch back to Markdown editor", () => {
       void this.switchToMarkdown();
     });
-    await this.renderView();
+    // Obsidian opens the view before supplying its Markdown buffer.
+    // setViewData will render it after loading; never parse or replace null text.
+    if (this.data != null) {
+      await this.renderView();
+    }
   }
 
   async toggleLayoutOrientation(): Promise<void> {
