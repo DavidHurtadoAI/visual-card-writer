@@ -79,7 +79,7 @@ export function parseCardDocument(source: string): CardDocument {
 }
 
 export function needsRootHeading(document: CardDocument): boolean {
-  return document.structure === "headings" && (document.cards.length === 0 || document.cards[0].level !== 1);
+  return document.structure === "headings" && document.cards.length === 0;
 }
 
 export function hasBlockingIssues(document: CardDocument): boolean {
@@ -221,14 +221,6 @@ function toStructuralHeading(source: string, node: Heading): StructuralHeading |
 
 function validateHierarchy(headings: StructuralHeading[]): ParseIssue[] {
   const issues: ParseIssue[] = [];
-  if (headings[0].level !== 1) {
-    issues.push({
-      kind: "missing-root",
-      line: headings[0].line,
-      message: `The hierarchy must start at H1, not H${headings[0].level}.`,
-      currentLevel: headings[0].level
-    });
-  }
   for (let index = 1; index < headings.length; index += 1) {
     const previous = headings[index - 1];
     const current = headings[index];

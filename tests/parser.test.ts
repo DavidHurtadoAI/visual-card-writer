@@ -59,11 +59,19 @@ describe("parseCardDocument", () => {
     expect(parsed.cards[0].title).toBe("Title");
   });
 
-  it("reports when hierarchy does not begin at H1", () => {
+  it("accepts a hierarchy beginning at any heading level without rewriting it", () => {
     const parsed = parseCardDocument("## Orphan\nBody\n");
 
-    expect(parsed.issues[0]).toMatchObject({ line: 1 });
-    expect(parsed.issues[0].message).toContain("start at H1");
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.cards[0].markdown).toBe("## Orphan\nBody\n");
+    for (let level = 1; level <= 6; level++) {
+      const text = `${"#".repeat(level)} One\nBody\n\n${"#".repeat(level)} Two\n`;
+      const forest = parseCardDocument(text);
+      expect(forest.roots).toHaveLength(2);
+      expect(forest.issues).toEqual([]);
+      expect(needsRootHeading(forest)).toBe(false);
+      expect(forest.cards.map(card => card.markdown).join("")).toBe(text);
+    }
   });
 
   it("reports heading-level jumps", () => {
@@ -164,10 +172,12 @@ describe("synthetic root heading fallback", () => {
     expect(needsRootHeading(parsed)).toBe(true);
   });
 
-  it("flags a document that starts below H1 as needing a root heading", () => {
+  it("preserves a forest that starts below H1 without adding a root heading", () => {
     const parsed = parseCardDocument("## Orphan\nBody\n\n## Sibling\nBody\n");
 
-    expect(needsRootHeading(parsed)).toBe(true);
+    expect(needsRootHeading(parsed)).toBe(false);
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.roots).toHaveLength(2);
   });
 
   it("does not flag a document that already starts at H1", () => {

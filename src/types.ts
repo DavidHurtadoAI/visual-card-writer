@@ -24,12 +24,6 @@ export type ParseIssue =
       message: string;
     }
   | {
-      kind: "missing-root";
-      line: number;
-      message: string;
-      currentLevel: number;
-    }
-  | {
       kind: "level-jump";
       line: number;
       message: string;

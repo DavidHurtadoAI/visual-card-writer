@@ -16,17 +16,9 @@ export function getHierarchyGuidance(issue: ParseIssue): HierarchyGuidance {
     };
   }
 
-  if (issue.kind === "missing-root") {
-    return {
-      title: `The first card heading is H${issue.currentLevel}`,
-      explanation: `Line ${issue.line} starts below H1. Visual Card Writer needs an H1 as the root of the card tree.`,
-      resolution: "Change the first heading to H1, or add an H1 before it."
-    };
-  }
-
   return {
     title: "No card headings were found",
     explanation: "Visual Card Writer uses Markdown headings to build the card tree.",
-    resolution: "Add an H1 heading to start the document."
+    resolution: "Add a Markdown heading (H1–H6) to start the document."
   };
 }
