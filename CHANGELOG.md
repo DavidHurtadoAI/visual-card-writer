@@ -2,6 +2,17 @@
 
 All notable changes to Visual Card Writer will be documented here.
 
+## 0.2.2
+
+- Keep arrow keys, Enter and editing shortcuts inside the embedded editor instead of triggering card navigation or creation.
+- Wait for Obsidian's file buffer before rendering; opening a note no longer parses or replaces unloaded text.
+- Accept notes beginning at any heading level H1-H6 and multiple root trees without inserting or saving a synthetic H1.
+- Add card deletion through the context menu, command palette or Ctrl/Cmd+Backspace on a focused card outside its editor. Branches offer confirmed deletion or keeping/promoting their children.
+- Preserve frontmatter and prologue, select a surviving card, and provide undo/redo with an accessible toolbar undo even after deleting the last card.
+- Refuse stale confirmations and undo that would overwrite subsequent edits or another view's changes. Collapse expanded text blocks before deleting.
+
+Validated with lint, 132 unit tests, type checking/build, 42 real Obsidian hierarchy/deletion/concurrency checks, 689 keyboard/lifecycle/synchronization assertions and 98 assertions in a real floating window.
+
 ## 0.2.1
 
 - Remove the duplicate document title from the card view toolbar.
