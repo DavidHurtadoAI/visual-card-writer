@@ -18,15 +18,14 @@ describe("getHierarchyGuidance", () => {
     expect(guidance.resolution).toContain("add an H2 heading");
   });
 
-  it("explains why a root heading is required", () => {
+  it("asks for a heading without requiring H1 or changing source", () => {
     const guidance = getHierarchyGuidance({
-      kind: "missing-root",
+      kind: "no-headings",
       line: 1,
-      message: "The hierarchy must start at H1, not H3.",
-      currentLevel: 3
+      message: "No structural headings."
     });
 
-    expect(guidance.title).toContain("first card heading is H3");
-    expect(guidance.resolution).toContain("add an H1");
+    expect(guidance.title).toContain("No card headings");
+    expect(guidance.resolution).toContain("H1–H6");
   });
 });

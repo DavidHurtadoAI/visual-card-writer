@@ -29,6 +29,46 @@ export interface HeadingRepairResult {
 
 const DEFAULT_NEW_CARD_TITLE = "Untitled";
 
+export interface CardDeletionResult {
+  text: string;
+  document: CardDocument;
+  selectedCardId: string | null;
+  previousToNextCardIds: ReadonlyMap<string, string>;
+}
+
+/** Delete only source ranges owned by the selected card, preserving the prologue.
+ * Promotion rewrites structural heading markers, never headings inside code.
+ */
+export function deleteCard(source: string, document: CardDocument, cardId: string, promoteChildren = false): CardDeletionResult {
+  const index = document.cards.findIndex(card => card.id === cardId);
+  if (index < 0 || hasBlockingIssues(document) || document.cards.some(card => card.kind === "paragraph")) throw new Error("Collapse text blocks and select an existing card before deleting.");
+  const card = document.cards[index];
+  if (document.structure === "slides" && promoteChildren) throw new Error("Slides have no children to promote.");
+  const endIndex = document.structure === "slides" ? index + 1 : subtreeEndIndex(document.cards, index);
+  const removedEndIndex = promoteChildren ? index + 1 : endIndex;
+  const retained = document.cards.filter((_, i) => i < index || i >= removedEndIndex);
+  let text = source;
+  if (promoteChildren) {
+    for (let i = endIndex - 1; i > index; i--) text = replaceHeadingLevel(text, document.cards[i], document.cards[i].level - 1);
+  }
+  const start = document.structure === "slides" && index === document.cards.length - 1 && index > 0 ? document.cards[index - 1].range.end : card.range.start;
+  const end = document.structure === "slides" ? document.cards[index + 1]?.range.start ?? source.length
+    : promoteChildren ? card.range.end : subtreeEndOffset(source, document.cards, index);
+  text = text.slice(0, start) + text.slice(end);
+  const next = parseCardDocument(text);
+  const mapping = new Map<string, string>();
+  // A single remaining Marp slide has no separator and parses as headings.
+  if (next.cards.length === retained.length) {
+    retained.forEach((previous, i) => mapping.set(previous.id, next.cards[i].id));
+  } else if (retained.length > 0) {
+    throw new Error("Deletion would change the structure of the remaining cards. Use the Markdown editor instead.");
+  }
+  const siblings = document.cards.filter(candidate => candidate.parentId === card.parentId);
+  const siblingIndex = siblings.findIndex(candidate => candidate.id === cardId);
+  const preferred = siblings[siblingIndex - 1]?.id ?? card.parentId ?? retained[Math.min(index, retained.length - 1)]?.id;
+  return { text, document: next, selectedCardId: preferred ? mapping.get(preferred) ?? next.cards[0]?.id ?? null : null, previousToNextCardIds: mapping };
+}
+
 export function insertCard(
   source: string,
   document: CardDocument,

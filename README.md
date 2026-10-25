@@ -113,7 +113,7 @@ Supporting detail.
 
 Changing a heading level changes that card's position in the hierarchy. Content before the first heading remains outside the card tree.
 
-The hierarchy must start at an H1. If a note has no headings at all, or its topmost headings start below H1 (for example several H2s with no H1 above them), Visual Card Writer automatically inserts a `# <file name>` heading at the top of the note so it has a valid root card, then saves the note with that heading in place.
+The first heading can be any level from H1 to H6. Multiple top-level headings form a forest, including notes that start at H2 or H3. Opening a note never adds a synthetic heading or saves changes to its source. If no structural headings exist, the view explains how to add one in Markdown.
 
 ### Repair skipped heading levels
 
@@ -268,3 +268,9 @@ Bug reports and focused pull requests are welcome. See [CONTRIBUTING.md](CONTRIB
 ## License
 
 [MIT](LICENSE) © David Hurtado
+
+### Delete and restore cards
+
+Right-click a card and choose **Delete card**, use the matching command, or press **Ctrl/Cmd + Backspace** with the card focused outside its editor. A card with descendants offers **Delete branch** (with confirmation) or **Keep children**, which removes its own content and promotes descendants one heading level. Collapse expanded text blocks before deleting. Selection moves to the previous sibling, parent or another remaining root.
+
+Use **Ctrl/Cmd + Z**, the toolbar undo button, or **Undo card deletion** outside the embedded editor to restore a deletion; **Ctrl/Cmd + Shift + Z** redoes it. Deletion history is bounded to the current view/session and refuses to overwrite subsequent edits, including edits received from another view. Inside the editor, normal text editing and undo keys keep their usual behavior. No global default hotkeys are registered.

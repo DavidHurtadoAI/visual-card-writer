@@ -2,6 +2,7 @@ import {
   Component,
   MarkdownRenderer,
   Menu,
+  Modal,
   Notice,
   TextFileView,
   WorkspaceLeaf,
@@ -29,10 +30,8 @@ import {
 } from "@codemirror/view";
 import {
   hasBlockingIssues,
-  needsRootHeading,
   reconcileCard,
-  replaceCardFragment,
-  withSyntheticRootHeading
+  replaceCardFragment
 } from "./parser";
 import { getExpandableHeadingIds, parseDisclosureDocument } from "./text-blocks";
 import { getHierarchyGuidance } from "./hierarchy-guidance";
@@ -56,7 +55,8 @@ import {
   scrollAnimationDuration,
   zoomFromWheel
 } from "./navigation";
-import { insertCard, insertMissingParent, promoteCardBranch } from "./operations";
+import { deleteCard, insertCard, insertMissingParent, promoteCardBranch } from "./operations";
+import { DeletionHistory } from "./deletion-history";
 import { moveVisibleCard } from "./move-cards";
 import type { CardInsertionKind, CardInsertionResult, CardMovePlacement, HeadingRepairResult } from "./operations";
 import { essentialLivePreview } from "./live-preview";
@@ -92,6 +92,8 @@ interface CardTransitionSnapshot {
 type LevelJumpIssue = Extract<ParseIssue, { kind: "level-jump" }>;
 
 export class VisualCardWriterView extends TextFileView {
+  private readonly deletionHistory = new DeletionHistory();
+  private deletingCard = false;
   private parsed: CardDocument = { structure: "headings", cards: [], roots: [], issues: [], prologue: "" };
   private selectedCardId: string | null = null;
   private editor: EditorView | null = null;
@@ -246,6 +248,7 @@ export class VisualCardWriterView extends TextFileView {
       return;
     }
     if (this.sessionPath !== filePath) {
+      this.deletionHistory.clear();
       this.expandableHeadingIds = null;
       this.layoutOrientation = "horizontal";
       this.applyLayoutOrientationClass();
@@ -293,9 +296,18 @@ export class VisualCardWriterView extends TextFileView {
 
   async onOpen(): Promise<void> {
     this.containerEl.addClass("visual-card-writer-view");
+    this.contentEl.tabIndex = 0;
     this.applyLayoutOrientationClass();
     this.setFocusDimmingEnabled(this.focusDimming.get());
     this.registerDomEvent(this.contentEl, "click", (event) => this.handleViewClick(event));
+    this.registerDomEvent(this.contentEl, "keydown", event => {
+      if (this.isInsideActiveEditor(event) || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (event.key.toLowerCase() === "z" && (event.shiftKey ? this.deletionHistory.canRedo(this.data) : this.deletionHistory.canUndo(this.data))) {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.undoCardDeletion(event.shiftKey);
+      }
+    });
     this.addAction("file-text", "Switch back to Markdown editor", () => {
       void this.switchToMarkdown();
     });
@@ -642,6 +654,11 @@ export class VisualCardWriterView extends TextFileView {
     const toolbar = navigation.createDiv({ cls: "visual-card-writer-toolbar" });
     this.createOrientationToggle(toolbar);
     this.createFocusDimmingToggle(toolbar);
+    if (this.deletionHistory.canUndo(this.data)) {
+      const undo = toolbar.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Undo card deletion", title: "Undo card deletion (Ctrl/Cmd + Z)" } });
+      setIcon(undo, "undo-2");
+      undo.addEventListener("click", () => { void this.undoCardDeletion(); });
+    }
     const zoomButton = toolbar.createEl("button", {
       cls: "visual-card-writer-zoom-indicator",
       text: `${Math.round(this.zoomLevel * 100)}%`,
@@ -865,6 +882,14 @@ export class VisualCardWriterView extends TextFileView {
           void this.onCardDoubleClick(card.id);
         });
         cardElement.addEventListener("keydown", (event) => this.handleCardKeydown(event, card, ids));
+        cardElement.addEventListener("contextmenu", event => {
+          if (this.isInsideActiveEditor(event)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const menu = new Menu();
+          menu.addItem(item => item.setTitle("Delete card…").setIcon("trash-2").setWarning(true).onClick(() => { void this.deleteSelectedCard(card.id); }));
+          menu.showAtMouseEvent(event);
+        });
         try {
           await MarkdownRenderer.render(this.app, card.markdown, body, this.file?.path ?? "", component);
         } catch (error) {
@@ -922,6 +947,12 @@ export class VisualCardWriterView extends TextFileView {
       return;
     }
     const mod = event.ctrlKey || event.metaKey;
+    if (mod && !event.altKey && !event.shiftKey && event.key === "Backspace") {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.deleteSelectedCard(card.id);
+      return;
+    }
     if (mod && !event.altKey && !event.shiftKey && event.key === "ArrowRight") {
       event.preventDefault();
       event.stopPropagation();
@@ -1056,6 +1087,86 @@ export class VisualCardWriterView extends TextFileView {
       new Notice(`The card was created, but its editor could not be opened: ${message}`);
       await this.renderView();
     }
+  }
+
+  canDeleteCard(): boolean {
+    return !!this.selectedCardId && !this.editor && !this.sessionConflict && !this.deletingCard && !this.hasLineCards() && !hasBlockingIssues(this.parsed);
+  }
+
+  async deleteSelectedCard(cardId = this.selectedCardId): Promise<void> {
+    if (!cardId || this.deletingCard) return;
+    if (this.editor) await this.finishEditing(true);
+    if (!this.canDeleteCard()) {
+      new Notice("Collapse text blocks and resolve any edit conflict before deleting a card.");
+      return;
+    }
+    const card = this.cardById(cardId);
+    if (!card) return;
+    const original = this.data;
+    const path = this.file?.path;
+    this.deletingCard = true;
+    try {
+      const choice = card.children.length ? await new Promise<"branch" | "promote" | null>(resolve => {
+        const modal = new Modal(this.app);
+        let result: "branch" | "promote" | null = null;
+        modal.onOpen = () => {
+          modal.setTitle(`Delete “${card.title}”?`);
+          modal.contentEl.createEl("p", { text: "Delete the card and its descendants, or keep its children and move them up one heading level. You can undo with Ctrl/Cmd + Z." });
+          for (const [label, action] of [["Cancel", null], ["Keep children", "promote"], ["Delete branch", "branch"]] as const) {
+            const button = modal.contentEl.createEl("button", { text: label });
+            if (action === "branch") button.addClass("mod-warning");
+            button.addEventListener("click", () => { result = action; modal.close(); });
+          }
+        };
+        modal.onClose = () => { resolve(result); };
+        modal.open();
+      }) : "branch";
+      if (!choice) return;
+      if (this.file?.path !== path || this.data !== original || (this.session && this.session.text !== original) || this.sessionConflict) {
+        new Notice("The note changed while confirming deletion. Review it and try again.");
+        return;
+      }
+      const result = deleteCard(original, this.parsed, cardId, choice === "promote");
+      this.data = result.text;
+      this.parsed = result.document;
+      this.selectedCardId = result.selectedCardId;
+      this.collapsedCardIds = new Set([...this.collapsedCardIds].flatMap(id => result.previousToNextCardIds.get(id) ?? []));
+      this.cardHeights = new Map([...this.cardHeights].flatMap(([id, height]) => {
+        const next = result.previousToNextCardIds.get(id);
+        return next ? [[next, height] as const] : [];
+      }));
+      this.deletionHistory.record({ before: original, after: result.text, selectedBefore: cardId, selectedAfter: result.selectedCardId });
+      this.session?.commit(this.data, this, "local");
+      await this.save();
+      await this.renderView();
+      if (this.selectedCardId) await this.selectCard(this.selectedCardId);
+      else this.contentEl.focus();
+      new Notice("Card deleted. Ctrl/Cmd + Z restores it outside the card editor.");
+    } catch (error) {
+      // Keep the in-memory change available for undo if saving fails.
+      new Notice(`Could not complete deletion: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.deletingCard = false;
+    }
+  }
+
+  async undoCardDeletion(redo = false): Promise<void> {
+    if (this.editor || this.sessionConflict || this.deletingCard || (this.session && this.session.text !== this.data)) return;
+    const result = redo ? this.deletionHistory.redo(this.data) : this.deletionHistory.undo(this.data);
+    if (!result) return;
+    this.data = result.text;
+    this.parsed = this.parseDocument(this.data);
+    this.selectedCardId = result.selectedCardId;
+    this.collapsedCardIds.clear();
+    this.cardHeights.clear();
+    this.session?.commit(this.data, this, "local");
+    await this.save();
+    await this.renderView();
+    if (this.selectedCardId) await this.selectCard(this.selectedCardId);
+  }
+
+  canUndoCardDeletion(): boolean {
+    return !this.editor && !this.sessionConflict && !this.deletingCard && this.deletionHistory.canUndo(this.data);
   }
 
   private showHeadingJumpMenu(event: MouseEvent, card: CardNode, issue: LevelJumpIssue): void {
@@ -2889,21 +3000,12 @@ export class VisualCardWriterView extends TextFileView {
   }
 
   private applyDocumentText(text: string): void {
-    let source = text;
-    let parsed = this.parseDocument(source);
-    if (this.file && needsRootHeading(parsed)) {
-      source = withSyntheticRootHeading(source, this.file.basename);
-      parsed = this.parseDocument(source);
-    }
+    const source = text;
+    const parsed = this.parseDocument(source);
     this.data = source;
     this.parsed = parsed;
     if (this.expandableHeadingIds == null) this.expandableHeadingIds = getExpandableHeadingIds(source);
     else this.scheduleBlockButtonUpdate();
-    if (source !== text) {
-      this.session?.commit(source, this, "local");
-      new Notice(`Added a "${this.file!.basename}" heading because the note had no top-level heading.`);
-      void this.save();
-    }
     let initializingCollapseState = false;
     if (!this.collapseStateInitialized && !hasBlockingIssues(this.parsed) && this.parsed.cards.length > 0) {
       this.collapsedCardIds = new Set([...getBranchCardIds(this.parsed.cards), ...getExpandableHeadingIds(this.data)]);

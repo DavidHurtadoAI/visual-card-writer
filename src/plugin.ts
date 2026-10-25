@@ -115,6 +115,28 @@ export default class VisualCardWriterPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "delete-card",
+      name: "Delete selected card",
+      checkCallback: checking => {
+        const view = this.app.workspace.getActiveViewOfType(VisualCardWriterView);
+        const available = view?.canDeleteCard() ?? false;
+        if (!checking && available && view) void view.deleteSelectedCard();
+        return available;
+      }
+    });
+
+    this.addCommand({
+      id: "undo-card-deletion",
+      name: "Undo card deletion",
+      checkCallback: checking => {
+        const view = this.app.workspace.getActiveViewOfType(VisualCardWriterView);
+        const available = view?.canUndoCardDeletion() ?? false;
+        if (!checking && available && view) void view.undoCardDeletion();
+        return available;
+      }
+    });
+
+    this.addCommand({
       id: "toggle-focus-dimming",
       name: "Toggle dimming of cards outside the selected branch",
       checkCallback: (checking) => {
